@@ -697,7 +697,7 @@ class Builder:
             schema.diphthong_2,
         )
         if schema.joining_type == Type.NON_JOINING:
-            glyph.left_side_bearing = scalar * schema.side_bearing
+            glyph.left_side_bearing = int(scalar * schema.side_bearing)
         else:
             entry_x = next(
                 (x for anchor_class_name, type, x, _ in glyph.anchorPoints

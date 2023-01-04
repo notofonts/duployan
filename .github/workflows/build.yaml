@@ -25,7 +25,6 @@ jobs:
           ninja-build \
           packaging-dev \
           pkg-config
-        ;
     - name: Install fontforge
       run: |
         curl -Lo fontforge.zip https://github.com/fontforge/fontforge/archive/${{ env.FONTFORGE_COMMIT }}.zip

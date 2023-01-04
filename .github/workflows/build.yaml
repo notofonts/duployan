@@ -55,6 +55,8 @@ jobs:
         sudo ninja install
     - name: Add site-packages to default search path
       run: echo "PYTHONPATH=$PWD/fontforge/build/target/lib/python${{ env.PYTHON_VERSION }}/site-packages:$PYTHONPATH" >>"$GITHUB_ENV"
+    - name: Setup tmate session
+      uses: mxschmitt/action-tmate@v3
     - name: Build fonts
       run: make build
     - name: Archive artifacts

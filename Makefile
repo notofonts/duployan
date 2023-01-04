@@ -1,5 +1,14 @@
-SOURCES=$(shell python3 scripts/read-config.py --sources )
 FAMILY=$(shell python3 scripts/read-config.py --family )
+
+STYLES = Regular Bold
+FONT_FAMILY_NAME = NotoSansDuployan
+VERSION = 3.001
+RELEASE = --release
+CHECK_ARGS = --incomplete
+override NOTO = --noto
+SUFFIXES = otf ttf
+FONTS = $(foreach suffix,$(SUFFIXES),$(addprefix fonts/$(suffix)/unhinted/instance_$(suffix)/$(FONT_FAMILY_NAME)-,$(addsuffix .$(suffix),$(STYLES))))
+
 
 help:
 	@echo "###"
@@ -12,13 +21,22 @@ help:
 	@echo "  make images: Creates PNG specimen images in the documentation/ directory"
 	@echo
 
-build: build.stamp
 
 venv: venv/touchfile
 
-build.stamp: venv .init.stamp sources/config*.yaml $(SOURCES)
-	rm -rf fonts
-	(for config in sources/config*.yaml; do . venv/bin/activate; python3 -m notobuilder $$config; done)  && touch build.stamp
+.PHONY: build
+build: venv .init.stamp sources/config*.yaml $(FONTS)
+
+
+fonts/otf/unhinted/instance_otf/$(FONT_FAMILY_NAME)-Regular.otf: sources/Duployan.fea sources/*.py
+	. venv/bin/activate ; python sources/build.py --fea $< $(NOTO) --output $@ $(RELEASE) --version $(VERSION)
+
+fonts/otf/unhinted/instance_otf/$(FONT_FAMILY_NAME)-Bold.otf: sources/Duployan.fea sources/*.py
+	. venv/bin/activate ; python sources/build.py --bold --fea $< $(NOTO) --output $@ $(RELEASE) --version $(VERSION)
+
+$(addprefix fonts/ttf/unhinted/instance_ttf/$(FONT_FAMILY_NAME)-,$(addsuffix .ttf,$(STYLES))): fonts/ttf/unhinted/instance_ttf/%.ttf: fonts/otf/unhinted/instance_otf/%.otf
+	mkdir -p "$$(dirname "$@")"
+	otf2ttf --output "$@" --overwrite "$<"
 
 .init.stamp: venv
 	. venv/bin/activate; python3 scripts/first-run.py

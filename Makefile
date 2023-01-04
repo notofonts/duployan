@@ -28,15 +28,15 @@ venv: venv/touchfile
 build: venv .init.stamp sources/config*.yaml $(FONTS)
 
 
-fonts/otf/unhinted/instance_otf/$(FONT_FAMILY_NAME)-Regular.otf: sources/Duployan.fea sources/*.py
+fonts/otf/unhinted/instance_otf/$(FONT_FAMILY_NAME)-Regular.otf: sources/Duployan.fea sources/*.py venv
 	. venv/bin/activate ; python sources/build.py --fea $< $(NOTO) --output $@ $(RELEASE) --version $(VERSION)
 
-fonts/otf/unhinted/instance_otf/$(FONT_FAMILY_NAME)-Bold.otf: sources/Duployan.fea sources/*.py
+fonts/otf/unhinted/instance_otf/$(FONT_FAMILY_NAME)-Bold.otf: sources/Duployan.fea sources/*.py venv
 	. venv/bin/activate ; python sources/build.py --bold --fea $< $(NOTO) --output $@ $(RELEASE) --version $(VERSION)
 
-$(addprefix fonts/ttf/unhinted/instance_ttf/$(FONT_FAMILY_NAME)-,$(addsuffix .ttf,$(STYLES))): fonts/ttf/unhinted/instance_ttf/%.ttf: fonts/otf/unhinted/instance_otf/%.otf
+$(addprefix fonts/ttf/unhinted/instance_ttf/$(FONT_FAMILY_NAME)-,$(addsuffix .ttf,$(STYLES))): fonts/ttf/unhinted/instance_ttf/%.ttf: fonts/otf/unhinted/instance_otf/%.otf venv
 	mkdir -p "$$(dirname "$@")"
-	otf2ttf --output "$@" --overwrite "$<"
+	. venv/bin/activate ; otf2ttf --output "$@" --overwrite "$<"
 
 .init.stamp: venv
 	. venv/bin/activate; python3 scripts/first-run.py

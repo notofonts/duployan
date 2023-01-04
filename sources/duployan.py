@@ -727,7 +727,7 @@ class Builder:
         if schema.glyph_class == GlyphClass.MARK:
             glyph.width = 0
         else:
-            glyph.right_side_bearing = scalar * schema.side_bearing
+            glyph.right_side_bearing = int(scalar * schema.side_bearing)
 
     def _create_glyph(self, schema: Schema, *, drawing: bool) -> fontforge.glyph:
         glyph_name = str(schema)

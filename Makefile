@@ -32,7 +32,7 @@ fonts/$(FONT_FAMILY_NAME)/unhinted/otf/NotoSansDuployan-Regular.otf: sources/Dup
 fonts/$(FONT_FAMILY_NAME)/unhinted/otf/NotoSansDuployan-Bold.otf: sources/Duployan.fea sources/*.py venv
 	. venv/bin/activate ; python sources/build.py --bold --fea $< $(NOTO) --output $@ $(RELEASE) --version $(VERSION)
 
-$(addprefix fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/%.ttf: fonts/otf/unhinted/otf/%.otf venv
+$(addprefix fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/%.ttf: fonts/$(FONT_FAMILY_NAME)/unhinted/otf/%.otf venv
 	mkdir -p "$$(dirname "$@")"
 	. venv/bin/activate ; otf2ttf --output "$@" --overwrite "$<"
 	. venv/bin/activate ; python3 scripts/hotfix.py $@

@@ -5,7 +5,7 @@ RELEASE = --release
 CHECK_ARGS = --incomplete
 override NOTO = --noto
 SUFFIXES = otf ttf
-FONTS = $(foreach suffix,$(SUFFIXES),$(addprefix fonts/$(suffix)/unhinted/$(suffix)/NotoSansDuployan-,$(addsuffix .$(suffix),$(STYLES))))
+FONTS = $(foreach suffix,$(SUFFIXES),$(addprefix fonts/$(FONT_FAMILY_NAME)/unhinted/$(suffix)/NotoSansDuployan-,$(addsuffix .$(suffix),$(STYLES))))
 
 
 help:

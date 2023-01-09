@@ -1,5 +1,3 @@
-FAMILY=$(shell python3 scripts/read-config.py --family )
-
 STYLES = Regular Bold
 FONT_FAMILY_NAME = NotoSansDuployan
 VERSION = 3.001
@@ -7,12 +5,12 @@ RELEASE = --release
 CHECK_ARGS = --incomplete
 override NOTO = --noto
 SUFFIXES = otf ttf
-FONTS = $(foreach suffix,$(SUFFIXES),$(addprefix fonts/$(suffix)/unhinted/instance_$(suffix)/$(FONT_FAMILY_NAME)-,$(addsuffix .$(suffix),$(STYLES))))
+FONTS = $(foreach suffix,$(SUFFIXES),$(addprefix fonts/$(suffix)/unhinted/$(suffix)/NotoSansDuployan-,$(addsuffix .$(suffix),$(STYLES))))
 
 
 help:
 	@echo "###"
-	@echo "# Build targets for $(FAMILY)"
+	@echo "# Build targets for $(FONT_FAMILY_NAME)"
 	@echo "###"
 	@echo
 	@echo "  make build:  Builds the fonts and places them in the fonts/ directory"
@@ -28,15 +26,16 @@ venv: venv/touchfile
 build: venv .init.stamp sources/config*.yaml $(FONTS)
 
 
-fonts/otf/unhinted/instance_otf/$(FONT_FAMILY_NAME)-Regular.otf: sources/Duployan.fea sources/*.py venv
+fonts/$(FONT_FAMILY_NAME)/unhinted/otf/NotoSansDuployan-Regular.otf: sources/Duployan.fea sources/*.py venv
 	. venv/bin/activate ; python sources/build.py --fea $< $(NOTO) --output $@ $(RELEASE) --version $(VERSION)
 
-fonts/otf/unhinted/instance_otf/$(FONT_FAMILY_NAME)-Bold.otf: sources/Duployan.fea sources/*.py venv
+fonts/$(FONT_FAMILY_NAME)/unhinted/otf/NotoSansDuployan-Bold.otf: sources/Duployan.fea sources/*.py venv
 	. venv/bin/activate ; python sources/build.py --bold --fea $< $(NOTO) --output $@ $(RELEASE) --version $(VERSION)
 
-$(addprefix fonts/ttf/unhinted/instance_ttf/$(FONT_FAMILY_NAME)-,$(addsuffix .ttf,$(STYLES))): fonts/ttf/unhinted/instance_ttf/%.ttf: fonts/otf/unhinted/instance_otf/%.otf venv
+$(addprefix fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/%.ttf: fonts/otf/unhinted/otf/%.otf venv
 	mkdir -p "$$(dirname "$@")"
 	. venv/bin/activate ; otf2ttf --output "$@" --overwrite "$<"
+	. venv/bin/activate ; python3 scripts/hotfix.py $@
 
 .init.stamp: venv
 	. venv/bin/activate; python3 scripts/first-run.py
@@ -58,12 +57,6 @@ proof: venv build.stamp
 clean:
 	rm -rf venv
 	find . -name "*.pyc" | xargs rm delete
-
-update-ufr:
-	npx update-template https://github.com/notofonts/noto-project-template/
-
-update:
-	pip install --upgrade $(dependency)
 
 manual_release: build.stamp
 	@echo "Creating release files manually is contraindicated."

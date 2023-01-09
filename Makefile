@@ -35,7 +35,7 @@ fonts/$(FONT_FAMILY_NAME)/unhinted/otf/NotoSansDuployan-Bold.otf: sources/Duploy
 $(addprefix fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/%.ttf: fonts/$(FONT_FAMILY_NAME)/unhinted/otf/%.otf venv
 	mkdir -p "$$(dirname "$@")"
 	. venv/bin/activate ; otf2ttf --output "$@" --overwrite "$<"
-	. venv/bin/activate ; python3 scripts/hotfix.py $@
+	. venv/bin/activate ; python3 scripts/hotfix.py -o $@ $@
 
 .init.stamp: venv
 	. venv/bin/activate; python3 scripts/first-run.py

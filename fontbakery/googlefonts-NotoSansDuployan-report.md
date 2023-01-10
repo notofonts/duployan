@@ -2,7 +2,7 @@
 
 Fontbakery version: 0.8.11a8
 
-<details><summary><b>[13] NotoSansDuployan-Bold.ttf</b></summary><div><details><summary>🔥 <b>FAIL:</b> Noto fonts must have an ARTICLE.en_us.html file (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/description/noto_has_article">com.google.fonts/check/description/noto_has_article</a>)</summary><div>
+<details><summary><b>[12] NotoSansDuployan-Bold.ttf</b></summary><div><details><summary>🔥 <b>FAIL:</b> Noto fonts must have an ARTICLE.en_us.html file (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/description/noto_has_article">com.google.fonts/check/description/noto_has_article</a>)</summary><div>
 
 
 * 🔥 **FAIL** This is a Noto font but it lacks an ARTICLE.en_us.html file [code: missing-article]
@@ -24,10 +24,6 @@ Fontbakery version: 0.8.11a8
 	- uni0327 
 
 	- And uni0328 [code: unattached-dotted-circle-marks]
-</div></details><details><summary>⚠ <b>WARN:</b> License URL matches License text on name table? (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/name/license_url">com.google.fonts/check/name/license_url</a>)</summary><div>
-
-
-* ⚠ **WARN** Please consider using HTTPS URLs at name table entry [plat=3, enc=1, name=14] [code: http-in-license-info]
 </div></details><details><summary>⚠ <b>WARN:</b> Ensure files are not too large. (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/file_size">com.google.fonts/check/file_size</a>)</summary><div>
 
 
@@ -137,7 +133,7 @@ Use -F or --full-lists to disable shortening of long lists. [code: found-misalig
 	* And 5 more.
 
 Use -F or --full-lists to disable shortening of long lists. [code: found-jaggy-segments]
-</div></details><br></div></details><details><summary><b>[12] NotoSansDuployan-Regular.ttf</b></summary><div><details><summary>🔥 <b>FAIL:</b> Noto fonts must have an ARTICLE.en_us.html file (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/description/noto_has_article">com.google.fonts/check/description/noto_has_article</a>)</summary><div>
+</div></details><br></div></details><details><summary><b>[11] NotoSansDuployan-Regular.ttf</b></summary><div><details><summary>🔥 <b>FAIL:</b> Noto fonts must have an ARTICLE.en_us.html file (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/description/noto_has_article">com.google.fonts/check/description/noto_has_article</a>)</summary><div>
 
 
 * 🔥 **FAIL** This is a Noto font but it lacks an ARTICLE.en_us.html file [code: missing-article]
@@ -159,10 +155,6 @@ Use -F or --full-lists to disable shortening of long lists. [code: found-jaggy-s
 	- uni0327 
 
 	- And uni0328 [code: unattached-dotted-circle-marks]
-</div></details><details><summary>⚠ <b>WARN:</b> License URL matches License text on name table? (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/name/license_url">com.google.fonts/check/name/license_url</a>)</summary><div>
-
-
-* ⚠ **WARN** Please consider using HTTPS URLs at name table entry [plat=3, enc=1, name=14] [code: http-in-license-info]
 </div></details><details><summary>⚠ <b>WARN:</b> Ensure files are not too large. (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/file_size">com.google.fonts/check/file_size</a>)</summary><div>
 
 
@@ -238,8 +230,8 @@ The following glyphs do not have the recommended number of contours:
 
 | 💔 ERROR | 🔥 FAIL | ⚠ WARN | 💤 SKIP | ℹ INFO | 🍞 PASS | 🔎 DEBUG |
 |:-----:|:----:|:----:|:----:|:----:|:----:|:----:|
-| 0 | 4 | 21 | 234 | 15 | 177 | 0 |
-| 0% | 1% | 5% | 52% | 3% | 39% | 0% |
+| 0 | 4 | 19 | 234 | 15 | 179 | 0 |
+| 0% | 1% | 4% | 52% | 3% | 40% | 0% |
 
 **Note:** The following loglevels were omitted in this report:
 * **SKIP**

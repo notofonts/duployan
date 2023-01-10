@@ -5,7 +5,17 @@ RELEASE = --release
 CHECK_ARGS = --incomplete
 override NOTO = --noto
 SUFFIXES = otf ttf
-FONTS = $(foreach suffix,$(SUFFIXES),$(addprefix fonts/$(FONT_FAMILY_NAME)/unhinted/$(suffix)/NotoSansDuployan-,$(addsuffix .$(suffix),$(STYLES))))
+FONTS = \
+	fonts/NotoSansDuployan/unhinted/otf/NotoSansDuployan-Regular.otf \
+	fonts/NotoSansDuployan/unhinted/otf/NotoSansDuployan-Bold.otf \
+	fonts/NotoSansDuployan/unhinted/ttf/NotoSansDuployan-Regular.ttf \
+	fonts/NotoSansDuployan/unhinted/ttf/NotoSansDuployan-Bold.ttf \
+	fonts/NotoSansDuployan/hinted/otf/NotoSansDuployan-Regular.otf \
+	fonts/NotoSansDuployan/hinted/otf/NotoSansDuployan-Bold.otf \
+	fonts/NotoSansDuployan/hinted/ttf/NotoSansDuployan-Regular.ttf \
+	fonts/NotoSansDuployan/hinted/ttf/NotoSansDuployan-Bold.ttf \
+	fonts/NotoSansDuployan/googlefonts/ttf/NotoSansDuployan-Regular.ttf \
+	fonts/NotoSansDuployan/googlefonts/ttf/NotoSansDuployan-Bold.ttf \
 
 
 help:

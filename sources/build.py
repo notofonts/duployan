@@ -79,7 +79,7 @@ def set_noto_values(tt_font: fontTools.ttLib.ttFont.TTFont) -> None:
         elif name.nameID == 1:
             name.string = 'Noto Sans Duployan'
         elif name.nameID == 13:
-            name.string = 'This Font Software is licensed under the SIL Open Font License, Version 1.1. This Font Software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the SIL Open Font License for the specific language, permissions and limitations governing your use of this Font Software.'
+            name.string = 'This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://scripts.sil.org/OFL'
     tt_font['name'].addMultilingualName({'en': 'Noto is a trademark of Google LLC'}, None, 7, mac=False)
     tt_font['name'].addMultilingualName({'en': 'http://www.google.com/get/noto/'}, None, 11, mac=False)
 

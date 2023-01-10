@@ -35,7 +35,14 @@ fonts/$(FONT_FAMILY_NAME)/unhinted/otf/NotoSansDuployan-Bold.otf: sources/Duploy
 $(addprefix fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/%.ttf: fonts/$(FONT_FAMILY_NAME)/unhinted/otf/%.otf venv
 	mkdir -p "$$(dirname "$@")"
 	. venv/bin/activate ; otf2ttf --output "$@" --overwrite "$<"
-	. venv/bin/activate ; python3 scripts/hotfix.py -o $@ $@
+
+$(addprefix fonts/$(FONT_FAMILY_NAME)/hinted/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/hinted/ttf/%.ttf: fonts/$(FONT_FAMILY_NAME)/hinted/otf/%.otf venv
+	mkdir -p "$$(dirname "$@")"
+	cp $< $@
+
+$(addprefix fonts/$(FONT_FAMILY_NAME)/googlefonts/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/googlefonts/ttf/%.ttf: fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/%.ttf venv
+	mkdir -p "$$(dirname "$@")"
+	. venv/bin/activate ; python3 scripts/hotfix.py -o $@ $<
 
 .init.stamp: venv
 	. venv/bin/activate; python3 scripts/first-run.py

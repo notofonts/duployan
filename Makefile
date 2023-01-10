@@ -46,7 +46,11 @@ $(addprefix fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/NotoSansDuployan-,$(addsuffix
 	mkdir -p "$$(dirname "$@")"
 	. venv/bin/activate ; otf2ttf --output "$@" --overwrite "$<"
 
-$(addprefix fonts/$(FONT_FAMILY_NAME)/hinted/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/hinted/ttf/%.ttf: fonts/$(FONT_FAMILY_NAME)/hinted/otf/%.otf venv
+$(addprefix fonts/$(FONT_FAMILY_NAME)/hinted/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/hinted/ttf/%.ttf: fonts/$(FONT_FAMILY_NAME)/unhinted/otf/%.otf venv
+	mkdir -p "$$(dirname "$@")"
+	cp $< $@
+
+$(addprefix fonts/$(FONT_FAMILY_NAME)/hinted/otf/NotoSansDuployan-,$(addsuffix .otf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/hinted/otf/%.otf: fonts/$(FONT_FAMILY_NAME)/unhinted/otf/%.otf venv
 	mkdir -p "$$(dirname "$@")"
 	cp $< $@
 

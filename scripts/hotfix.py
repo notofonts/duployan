@@ -41,7 +41,11 @@ merger = Merger()
 ttfont = merger.merge([args.font, "Noto.ttf"])
 fix_font(ttfont, include_source_fixes=True)
 
-ttfont["OS/2"].usWinAscent = 1672
+ttfont["OS/2"].usWinAscent = 1729
 ttfont["OS/2"].usWinDescent = 357
+ttfont["OS/2"].sTypoAscender = 1069
+ttfont["OS/2"].sTypoDescender = -293
+ttfont["hhea"].ascender = 1069
+ttfont["hhea"].descender = -293
 
 ttfont.save(args.output)

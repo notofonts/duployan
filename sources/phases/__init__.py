@@ -1,4 +1,4 @@
-# Copyright 2018-2019 David Corbett
+# Copyright 2018-2019, 2022-2023 David Corbett
 # Copyright 2020-2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -120,6 +120,7 @@ from typing import Set
 from typing import Tuple
 from typing import TypeVar
 from typing import Union
+from typing import cast
 from typing import overload
 
 
@@ -280,6 +281,63 @@ class Rule:
             with one element per element of `inputs`.
     """
 
+    @overload
+    def __init__(
+        self,
+        a1: Union[str, Sequence[Union[schema.Schema, str]]],
+        a2: Union[str, Sequence[Union[schema.Schema, str]]],
+        /,
+    ) -> None:
+        ...
+
+    @overload
+    def __init__(
+        self,
+        a1: Union[str, Sequence[Union[schema.Schema, str]]],
+        a2: Union[str, Sequence[Union[schema.Schema, str]]],
+        a3: Union[str, Sequence[Union[schema.Schema, str]]],
+        a4: Union[str, Sequence[Union[schema.Schema, str]]],
+        /,
+    ) -> None:
+        ...
+
+    @overload
+    def __init__(
+        self,
+        a1: Union[str, Sequence[Union[schema.Schema, str]]],
+        a2: Union[str, Sequence[Union[schema.Schema, str]]],
+        a3: Optional[Union[str, Sequence[Union[schema.Schema, str]]]],
+        /,
+        *,
+        lookups: Sequence[Optional[str]],
+    ) -> None:
+        ...
+
+    @overload
+    def __init__(
+        self,
+        a1: Union[str, Sequence[Union[schema.Schema, str]]],
+        a2: Union[str, Sequence[Union[schema.Schema, str]]],
+        a3: Optional[Union[str, Sequence[Union[schema.Schema, str]]]],
+        /,
+        *,
+        x_placements: Sequence[Optional[float]],
+        x_advances: Optional[Sequence[Optional[float]]],
+    ) -> None:
+        ...
+
+    @overload
+    def __init__(
+        self,
+        a1: Union[str, Sequence[Union[schema.Schema, str]]],
+        a2: Union[str, Sequence[Union[schema.Schema, str]]],
+        a3: Optional[Union[str, Sequence[Union[schema.Schema, str]]]],
+        /,
+        *,
+        x_advances: Sequence[Optional[float]],
+    ) -> None:
+        ...
+
     def __init__(
         self,
         a1: Union[str, Sequence[Union[schema.Schema, str]]],
@@ -310,7 +368,7 @@ class Rule:
             a2: The input sequence, or the output sequence in the
                 shorthand form.
             a3: The lookahead sequence, if using the full form.
-            a4: The output sequence.
+            a4: The output sequence, if using the full form.
             lookups: The ``lookups`` attribute.
             x_placements: The ``x_placements`` attribute.
             x_advances: The ``x_advances`` attribute.
@@ -385,7 +443,10 @@ class Rule:
             A sequence of fontTools feaLib ASTs corresponding to this
             rule.
         """
-        def glyph_to_ast(glyph, unrolling_index=None):
+        def glyph_to_ast(
+            glyph: Union[str, schema.Schema],
+            unrolling_index: Optional[int] = None,
+        ) -> Union[fontTools.feaLib.ast.GlyphClassName, fontTools.feaLib.ast.GlyphName]:
             if isinstance(glyph, str):
                 if unrolling_index is not None:
                     return fontTools.feaLib.ast.GlyphName(class_asts[glyph].glyphs.glyphs[unrolling_index])
@@ -393,22 +454,32 @@ class Rule:
                     return fontTools.feaLib.ast.GlyphClassName(class_asts[glyph])
             return fontTools.feaLib.ast.GlyphName(str(glyph))
 
-        def glyphs_to_ast(glyphs, unrolling_index=None):
+        def glyphs_to_ast(
+            glyphs: Iterable[Union[str, schema.Schema]],
+            unrolling_index: Optional[int] = None,
+        ) -> Sequence[Union[fontTools.feaLib.ast.GlyphClassName, fontTools.feaLib.ast.GlyphName]]:
             return [glyph_to_ast(glyph, unrolling_index) for glyph in glyphs]
 
-        def glyph_to_name(glyph, unrolling_index=None):
+        def glyph_to_name(
+            glyph: Union[str, schema.Schema],
+            unrolling_index: Optional[int] = None,
+        ) -> str:
             if isinstance(glyph, str):
                 if unrolling_index is not None:
-                    return class_asts[glyph].glyphs.glyphs[unrolling_index]
+                    return cast(Sequence[str], class_asts[glyph].glyphs.glyphs)[unrolling_index]
                 else:
                     assert not isinstance(glyph, str), f'Glyph classes are not allowed where only glyphs are expected: @{glyph}'
             return str(glyph)
 
-        def glyphs_to_names(glyphs, unrolling_index=None):
+        def glyphs_to_names(
+            glyphs: Iterable[Union[str, schema.Schema]],
+            unrolling_index: Optional[int] = None,
+        ) -> Sequence[str]:
             return [glyph_to_name(glyph, unrolling_index) for glyph in glyphs]
 
         if self.lookups is not None:
             assert not in_reverse_lookup, 'Reverse chaining contextual substitutions do not support lookup references'
+            assert self.contexts_out is not None
             return [fontTools.feaLib.ast.ChainContextSubstStatement(
                 glyphs_to_ast(self.contexts_in),
                 glyphs_to_ast(self.inputs),
@@ -418,6 +489,7 @@ class Rule:
         elif self.x_placements is not None or self.x_advances is not None:
             assert not in_reverse_lookup, 'There is no reverse positioning lookup type'
             assert len(self.inputs) == 1, 'Only single adjustment positioning has been implemented'
+            assert self.contexts_out is not None
             return [fontTools.feaLib.ast.SinglePosStatement(
                 list(zip(
                     glyphs_to_ast(self.inputs),
@@ -428,6 +500,7 @@ class Rule:
                                 self.x_advances or [None] * len(self.inputs),
                             )
                     ],
+                    strict=True,
                 )),
                 glyphs_to_ast(self.contexts_in),
                 glyphs_to_ast(self.contexts_out),
@@ -435,6 +508,7 @@ class Rule:
             )]
         elif len(self.inputs) == 1:
             assert self.outputs is not None
+            assert self.contexts_out is not None
             if len(self.outputs) == 1 and not in_multiple_lookup:
                 if in_reverse_lookup:
                     return [fontTools.feaLib.ast.ReverseChainSingleSubstStatement(
@@ -454,7 +528,7 @@ class Rule:
             else:
                 assert not in_reverse_lookup, 'Reverse chaining contextual substitutions only support single substitutions'
                 input = self.inputs[0]
-                if isinstance(input, str) and any(isinstance(output, str) for output in self.outputs):
+                if isinstance(input, str) and (not self.outputs or any(isinstance(output, str) for output in self.outputs)):
                     # Allow classes in multiple substitution output by unrolling all uses of
                     # the class in parallel with the input class.
                     asts = []
@@ -478,6 +552,7 @@ class Rule:
         else:
             assert not in_reverse_lookup, 'Reverse chaining contextual substitutions only support single substitutions'
             assert self.outputs is not None
+            assert self.contexts_out is not None
             output = self.outputs[0]
             if isinstance(output, str):
                 # Allow a class in ligature substitution output that is the same length
@@ -494,7 +569,7 @@ class Rule:
                         input_class_index = i
                 assert input_class is not None, 'A ligature substitution with a glyph class output must have a glyph class input'
                 asts = []
-                for input_glyph_name, output_glyph_name in zip(class_asts[input_class].glyphs.glyphs, class_asts[output].glyphs.glyphs):
+                for input_glyph_name, output_glyph_name in zip(class_asts[input_class].glyphs.glyphs, class_asts[output].glyphs.glyphs, strict=True):
                     asts.append(fontTools.feaLib.ast.LigatureSubstStatement(
                         glyphs_to_ast(self.contexts_in),
                         [
@@ -528,7 +603,6 @@ class Rule:
         return len(self.inputs) == 1 and self.outputs is not None and len(self.outputs) != 1
 
 
-# TODO: The only reason this is public is for `KNOWN_SCRIPTS`. Refactor.
 class Lookup:
     """An OpenType Layout lookup.
 
@@ -537,7 +611,7 @@ class Lookup:
     directly associated with a feature.
 
     Class attributes:
-        KNOWN_SCRIPTS: The list of strings that this class can handle.
+        KNOWN_SCRIPTS: The list of scripts that this class can handle.
 
     Attributes:
         feature: This lookup’s feature tag, if anonymous.
@@ -586,6 +660,7 @@ class Lookup:
         'tnum',
         'zero',
     }
+
     _REQUIRED_SCRIPT_FEATURES: ClassVar[Mapping[str, Set[str]]] = {
         'DFLT': {
             'abvm',
@@ -614,6 +689,7 @@ class Lookup:
             'rlig',
         },
     }
+
     KNOWN_SCRIPTS: ClassVar[Iterable[str]] = sorted(_REQUIRED_SCRIPT_FEATURES)
 
     @overload
@@ -901,7 +977,7 @@ def _add_rule(
         # TODO: Check prepending lookups too.
         for i, previous_rule in enumerate(lookup.rules):
             if lookup.prepending:
-                previous_rule, rule = rule, previous_rule
+                previous_rule, rule = rule, previous_rule  # type: ignore[unreachable]
             assert previous_rule.contexts_out is not None
             if (previous_rule.inputs == rule.inputs
                 and is_suffix(previous_rule.contexts_in, rule.contexts_in)
@@ -1053,10 +1129,10 @@ def run_phases(
                         autochthonous_schemas.add(output_schema)
                         new_input_schemas.add(output_schema)
         all_input_schemas = all_output_schemas
-        all_schemas |= all_input_schemas  # type: ignore[misc]
+        all_schemas |= all_input_schemas
         assert lookups is not None
         all_lookups_with_phases.extend((lookup, phase) for lookup in lookups)
-        all_named_lookups_with_phases |= ((name, (lookup, phase)) for name, lookup in named_lookups.items())  # type: ignore[arg-type]
+        all_named_lookups_with_phases |= ((name, (lookup, phase)) for name, lookup in named_lookups.items())
     return (
         all_schemas,
         all_input_schemas,

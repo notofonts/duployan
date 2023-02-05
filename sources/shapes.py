@@ -1,4 +1,4 @@
-# Copyright 2018-2019 David Corbett
+# Copyright 2018-2019, 2022-2023 David Corbett
 # Copyright 2019-2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -77,9 +77,11 @@ import math
 import typing
 from typing import Any
 from typing import Callable
+from typing import ClassVar
 from typing import Final
 from typing import Generic
 from typing import Literal
+from typing import LiteralString
 from typing import Optional
 from typing import Tuple
 from typing import TypeVar
@@ -307,7 +309,7 @@ class Shape:
         return {}
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         """Returns the glyph class that any schema with this shape is
         guaranteed to have, or ``None`` if there is no guarantee.
         """
@@ -362,7 +364,7 @@ class ContextMarker(Shape):
         return True
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -388,7 +390,7 @@ class Dummy(Shape):
         return True
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -406,8 +408,27 @@ class Start(Shape):
     def invisible(self) -> bool:
         return True
 
+    def draw(
+            self,
+            glyph: fontforge.glyph,
+            pen: fontforge.glyphPen | Literal[False],
+            stroke_width: float,
+            light_line: float,
+            stroke_gap: float,
+            size: float,
+            anchor: Optional[str],
+            joining_type: Type,
+            child: bool,
+            initial_circle_diphthong: bool,
+            final_circle_diphthong: bool,
+            diphthong_1: bool,
+            diphthong_2: bool,
+    ) -> bool:
+        glyph.addAnchorPoint(anchors.CURSIVE, 'exit', 0, 0)
+        return False
+
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -495,7 +516,7 @@ class Hub(Shape):
         return False
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -533,7 +554,7 @@ class End(Shape):
         return False
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.BLOCKER
 
 
@@ -552,7 +573,7 @@ class Carry(Shape):
         return True
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -606,7 +627,7 @@ class EntryWidthDigit(Shape):
         return True
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -650,7 +671,7 @@ class LeftBoundDigit(Shape):
         return True
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -694,7 +715,7 @@ class RightBoundDigit(Shape):
         return True
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -738,7 +759,7 @@ class AnchorWidthDigit(Shape):
         return True
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -781,13 +802,13 @@ class WidthNumber(Shape, Generic[_D]):
         return True
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
     def to_digits(
         self,
         register_width_marker: Callable[[type[_D], int, int], _D],
-    ) -> Sequence:
+    ) -> Sequence[_D]:
         """Converts this number to a sequence of digits.
 
         Args:
@@ -835,7 +856,7 @@ class MarkAnchorSelector(Shape):
         return True
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -855,7 +876,7 @@ class GlyphClassSelector(Shape):
         self.glyph_class = glyph_class
 
     def __str__(self) -> str:
-        return f'gc.{self.glyph_class}'
+        return f'gc.{self.glyph_class.name}'
 
     @staticmethod
     def name_implies_type() -> bool:
@@ -865,7 +886,7 @@ class GlyphClassSelector(Shape):
         return True
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -884,7 +905,7 @@ class InitialSecantMarker(Shape):
         return True
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -933,7 +954,7 @@ class Notdef(Shape):
         return False
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.BLOCKER
 
 
@@ -971,7 +992,7 @@ class Space(Shape):
     ):
         return type(self)(
             self.angle if angle is CLONE_DEFAULT else angle,
-            self.margins if margins is CLONE_DEFAULT else margins,
+            margins=self.margins if margins is CLONE_DEFAULT else margins,
         )
 
     def __str__(self) -> str:
@@ -1073,7 +1094,7 @@ class Bound(Shape):
         return False
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.BLOCKER
 
 
@@ -1095,7 +1116,7 @@ class ValidDTLS(Shape):
         return True
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -1168,14 +1189,14 @@ class ChildEdge(Shape):
         return False
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
 class ContinuingOverlapS(Shape):
     """A marker for a continuing edge pointing from a glyph to its child
     in an overlap tree.
-    
+
     This corresponds to an instance of U+1BCA1 SHORTHAND FORMAT
     CONTINUING OVERLAP, to an instance of U+1BCA0 SHORTHAND FORMAT
     LETTER OVERLAP promoted to U+1BCA1, or to a glyph inserted after an
@@ -1210,7 +1231,7 @@ class ContinuingOverlapS(Shape):
         return False
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -1285,7 +1306,7 @@ class ParentEdge(Shape):
         return False
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -1305,7 +1326,7 @@ class RootOnlyParentEdge(Shape):
         return True
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.MARK
 
 
@@ -1316,6 +1337,11 @@ class Dot(Shape):
         centered: Whether the cursive anchor points are placed in the
             center of the dot, as opposed to at the bottom.
     """
+
+    #: The factor by which to scale the nominal stroke width to get the
+    #: actual stroke width. A standalone dot should normally be scaled
+    #: up lest it be hard to see at small font sizes.
+    SCALAR: ClassVar[float] = 2 ** 0.5
 
     def __init__(
         self,
@@ -1365,6 +1391,7 @@ class Dot(Shape):
     ) -> bool:
         assert pen
         assert not child
+        stroke_width *= self.SCALAR ** (size - 1)
         pen.moveTo((0, 0))
         pen.lineTo((0, 0))
         glyph.stroke('circular', stroke_width, 'round')
@@ -1398,7 +1425,9 @@ class Line(Shape):
         minor: Whether this shape is minor in the sense of `Context`.
         stretchy: Whether the size of this shape refers to the y offset
             between entry and exit as opposed to the stroke length.
-        secant: Whether this is the shape of a secant character.
+        secant: How far along the stroke the secant overlap point is as
+            a proportion of the full stroke length, or ``None`` if this
+            is not a secant.
         secant_curvature_offset: If this shape is a diacritic, the
             offset for a curved base character’s angle. The diacritic is
             rotated as if the base character had a straight context
@@ -1598,23 +1627,32 @@ class Line(Shape):
                     glyph.addAnchorPoint(anchor_name(anchors.SECANT), base, child_interval * (max_tree_width + 1), 0)
             if size == 2 and 0 < self.angle <= 45:
                 # Special case for U+1BC18 DUPLOYAN LETTER RH
-                glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_1), base, length / 2 - (light_line + stroke_gap), -(stroke_width + light_line) / 2)
-                glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_2), base, length / 2 + light_line + stroke_gap, -(stroke_width + light_line) / 2)
+                glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_1), base, length / 2 - (light_line + stroke_gap), -(stroke_width + Dot.SCALAR * light_line) / 2)
+                glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_2), base, length / 2 + light_line + stroke_gap, -(stroke_width + Dot.SCALAR * light_line) / 2)
             else:
-                glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_1), base, length / 2, (stroke_width + light_line) / 2)
-                glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_2), base, length / 2, -(stroke_width + light_line) / 2)
+                glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_1), base, length / 2, (stroke_width + Dot.SCALAR * light_line) / 2)
+                glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_2), base, length / 2, -(stroke_width + Dot.SCALAR * light_line) / 2)
             glyph.addAnchorPoint(anchor_name(anchors.MIDDLE), base, length / 2, 0)
         glyph.transform(
             fontTools.misc.transform.Identity.rotate(math.radians(self.angle)),
             ('round',)
         )
         glyph.stroke('circular', stroke_width, 'round')
-        if not anchor and not self.secant:
-            x_min, y_min, x_max, y_max = glyph.boundingBox()
-            x_center = (x_max + x_min) / 2
-            glyph.addAnchorPoint(anchor_name(anchors.ABOVE), base, x_center, y_max + stroke_width / 2 + 2 * stroke_gap + light_line / 2)
-            glyph.addAnchorPoint(anchor_name(anchors.BELOW), base, x_center, y_min - (stroke_width / 2 + 2 * stroke_gap + light_line / 2))
-        return False
+        floating = False
+        if not anchor:
+            if self.secant is None:
+                x_min, y_min, x_max, y_max = glyph.boundingBox()
+                x_center = (x_max + x_min) / 2
+                glyph.addAnchorPoint(anchor_name(anchors.ABOVE), base, x_center, y_max + stroke_width / 2 + 2 * stroke_gap + light_line / 2)
+                glyph.addAnchorPoint(anchor_name(anchors.BELOW), base, x_center, y_min - (stroke_width / 2 + 2 * stroke_gap + light_line / 2))
+            elif self.angle % 90 == 0:
+                floating = True
+                y_offset = 2 * LINE_FACTOR * (2 * self.secant - 1)
+                if self.get_guideline_angle() % 180 == 90:
+                    glyph.transform(fontTools.misc.transform.Offset(y=y_offset + stroke_width / 2))
+                else:
+                    glyph.transform(fontTools.misc.transform.Offset(y=-y_offset - LINE_FACTOR + stroke_width / 2))
+        return floating
 
     def can_be_child(self, size: float) -> bool:
         return not (self.secant or self.dots)
@@ -1699,6 +1737,12 @@ class Line(Shape):
         opposite angle.
         """
         return self.clone(angle=(self.angle + 180) % 360)
+
+    def get_guideline_angle(self) -> float:
+        """Returns the angle of the guideline to display this line on,
+        assuming that this line is a secant.
+        """
+        return 270 if 45 <= (self.angle + 90) % 180 < 135 else 0
 
 
 class Curve(Shape):
@@ -1827,6 +1871,8 @@ class Curve(Shape):
                 int(self.angle_out)
             }{
                 'r' if self.reversed_circle else ''
+            }{
+                '.ee' if self.early_exit else ''
             }'''
 
     def group(self) -> Hashable:
@@ -2057,13 +2103,13 @@ class Curve(Shape):
                         .scale(scale_x, scale_y)
                         .rotate(-theta),
                 )
-                glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_2), base, *_rect(scale_x * r + stroke_width / 2 + stroke_gap + light_line / 2, math.radians(self.angle_in)))
+                glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_2), base, *_rect(scale_x * r + stroke_width / 2 + stroke_gap + Dot.SCALAR * light_line / 2, math.radians(self.angle_in)))
             else:
                 glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_1), base,
                     *(_rect(0, 0) if abs(da) > 180 else _rect(
-                        min(stroke_width, r - (stroke_width / 2 + stroke_gap + light_line / 2)),
+                        min(stroke_width, r - (stroke_width / 2 + stroke_gap + Dot.SCALAR * light_line / 2)),
                         math.radians(relative_mark_angle))))
-                glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_2), base, *_rect(r + stroke_width / 2 + stroke_gap + light_line / 2, math.radians(relative_mark_angle)))
+                glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_2), base, *_rect(r + stroke_width / 2 + stroke_gap + Dot.SCALAR * light_line / 2, math.radians(relative_mark_angle)))
         glyph.stroke('circular', stroke_width, 'round')
         if not anchor:
             x_min, y_min, x_max, y_max = glyph.boundingBox()
@@ -2349,6 +2395,8 @@ class Circle(Shape):
                 int(angle_out)
             }{
                 'r' if self.reversed and self.angle_in != self.angle_out else ''
+            }{
+                '.circle' if self.role != CircleRole.INDEPENDENT and self.angle_in != self.angle_out else ''
             }'''
 
     def group(self) -> Hashable:
@@ -2476,9 +2524,9 @@ class Circle(Shape):
                     .scale(scale_x, scale_y)
                     .rotate(-theta),
             )
-            glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_2), base, *_rect(scale_x * r + stroke_width / 2 + stroke_gap + light_line / 2, math.radians(angle_in)))
+            glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_2), base, *_rect(scale_x * r + stroke_width / 2 + stroke_gap + Dot.SCALAR * light_line / 2, math.radians(angle_in)))
         else:
-            glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_2), base, *_rect(r + stroke_width / 2 + stroke_gap + light_line / 2, math.radians((a1 + a2) / 2)))
+            glyph.addAnchorPoint(anchor_name(anchors.RELATIVE_2), base, *_rect(r + stroke_width / 2 + stroke_gap + Dot.SCALAR * light_line / 2, math.radians((a1 + a2) / 2)))
         glyph.stroke('circular', stroke_width, 'round')
         if diphthong_1 or diphthong_2:
             glyph.removeOverlap()
@@ -2783,7 +2831,8 @@ class Complex(Shape):
             """Initializes this `Proxy`.
             """
             self.anchor_points: collections.defaultdict[Tuple[str, _AnchorType], MutableSequence[_Point]] = collections.defaultdict(list)
-            self._contour = fontforge.contour()
+            self._layer = fontforge.layer()
+            self._layer += fontforge.contour()
 
         def addAnchorPoint(
             self,
@@ -2802,18 +2851,28 @@ class Complex(Shape):
             """
             self.anchor_points[(anchor_class_name, anchor_type)].append((x, y))
 
-        def stroke(self, *args: Any) -> None:
-            """Ignores `fontforge.glyph.stroke`.
+        def stroke(
+            self,
+            nib_type: LiteralString,
+            width_or_contour: float,
+            *args: float | str | Tuple[str, ...],
+            **kwargs: bool | float | str,
+        ) -> None:
+            """Simulates `fontforge.glyph.stroke`.
 
             Args:
-                args: Anything. The arguments are ignored. All components
-                    in a compound shape use the same stroke.
+                nib_type: The first argument.
+                width_or_contour: The ``width`` or ``contour`` argument,
+                    depending on `stroke_type`.
+                args: Further arguments.
+                kwargs: Further keyword arguments.
             """
+            self._layer.stroke(nib_type, width_or_contour, *args, **kwargs)
 
         def boundingBox(self) -> Tuple[float, float, float, float]:
             """Simulates `fontforge.glyph.boundingBox`.
             """
-            return self._contour.boundingBox()
+            return self._layer.boundingBox()
 
         def draw(self, pen: fontforge.glyphPen) -> None:
             """Draws the collected data to a FontForge glyph.
@@ -2821,7 +2880,7 @@ class Complex(Shape):
             Args:
                 pen: The pen to draw with.
             """
-            self._contour.draw(pen)
+            self._layer.draw(pen)
 
         def transform(self, matrix: Tuple[float, float, float, float, float, float], *args: Any) -> None:
             """Simulates `fontforge.glyph.transform`.
@@ -2834,18 +2893,16 @@ class Complex(Shape):
                 for i, x_y in enumerate(points):
                     new_point = fontforge.point(*x_y).transform(matrix)
                     self.anchor_points[anchor][i] = (new_point.x, new_point.y)
-            self._contour.transform(matrix)
+            self._layer.transform(matrix)
 
         def moveTo(self, x_y: _Point) -> None:
             """Simulates `fontforge.glyphPen.moveTo`.
 
-            Nothing happens if some pen data has already been collected.
-
             Args:
                 x_y: The ``(x, y)`` argument.
             """
-            if not self._contour:
-                self._contour.moveTo(*x_y)
+            for contour in self._layer:
+                contour.moveTo(*x_y)
 
         def lineTo(self, x_y: _Point) -> None:
             """Simulates `fontforge.glyphPen.lineTo`.
@@ -2853,7 +2910,8 @@ class Complex(Shape):
             Args:
                 x_y: The ``(x, y)`` argument.
             """
-            self._contour.lineTo(*x_y)
+            for contour in self._layer:
+                contour.lineTo(*x_y)
 
         def curveTo(self, cp1: _Point, cp2: _Point, x_y: _Point) -> None:
             """Simulates `fontforge.glyphPen.curveTo`.
@@ -2863,7 +2921,8 @@ class Complex(Shape):
                 cp2: The ``(cp2.x, cp2.y)`` argument.
                 x_y: The ``(x, y)`` argument.
             """
-            self._contour.cubicTo(cp1, cp2, x_y)
+            for contour in self._layer:
+                contour.cubicTo(cp1, cp2, x_y)
 
         def endPath(self) -> None:
             """Ignores `fontforge.glyphPen.endPath`.
@@ -3002,7 +3061,7 @@ class Complex(Shape):
         bad_indices = []
         foreground = glyph.foreground
         for contour_index, contour in enumerate(foreground):
-            if not contour.closed and len(contour) == 2 and contour[0] == contour[1]:
+            if not contour.closed:
                 bad_indices.append(contour_index)
         if bad_indices:
             for bad_index in reversed(bad_indices):
@@ -3037,7 +3096,6 @@ class Complex(Shape):
             first_is_invisible,
             singular_anchor_points,
         ) = self.draw_to_proxy(pen, stroke_width, light_line, stroke_gap, size)
-        glyph.stroke('circular', stroke_width, 'round')
         glyph.removeOverlap()
         self._remove_bad_contours(glyph)
         if not (anchor or child or joining_type == Type.NON_JOINING):
@@ -3099,7 +3157,7 @@ class Complex(Shape):
         forced_context = None
         for i, op in enumerate(self.instructions):
             if callable(op):
-                forced_context = op(forced_context or (context_out if initial_hook else context_in))
+                forced_context = op(context_out if initial_hook else context_in)
                 if forced_context.ignorable_for_topography:
                     forced_context = forced_context.clone(ignorable_for_topography=False)
                 instructions.append(op)
@@ -3168,7 +3226,7 @@ class InvalidDTLS(Complex):
         return NO_CONTEXT
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.BLOCKER
 
 
@@ -3207,7 +3265,7 @@ class InvalidOverlap(Complex):
         )
 
     @staticmethod
-    def guaranteed_glyph_class() -> Optional[str]:
+    def guaranteed_glyph_class() -> Optional[GlyphClass]:
         return GlyphClass.BLOCKER
 
 
@@ -3555,9 +3613,10 @@ class SeparateAffix(Complex):
         entry_x, exit_x = x_min, x_max
         if self.tight:
             entry_x, exit_x = exit_x, entry_x
-        glyph.addAnchorPoint(anchors.CURSIVE, 'entry', entry_x, cursive_y)
-        glyph.addAnchorPoint(anchors.CURSIVE, 'exit', exit_x, cursive_y)
-        return False
+        glyph.transform(fontTools.misc.transform.Offset(y=-cursive_y))
+        glyph.addAnchorPoint(anchors.CURSIVE, 'entry', entry_x, 0)
+        glyph.addAnchorPoint(anchors.CURSIVE, 'exit', exit_x, 0)
+        return True
 
     def is_pseudo_cursive(self, size: float) -> bool:
         return True
@@ -3608,7 +3667,7 @@ class Wa(Complex):
         size: float,
     ) -> Tuple[bool, collections.defaultdict[Tuple[str, _AnchorType], list[_Point]]]:
         first_is_invisible = None
-        last_crossing_point = None
+        last_crossing_point: Optional[_Point] = None
         singular_anchor_points = collections.defaultdict(list)
         for op in self.instructions:
             assert not callable(op)
@@ -3790,7 +3849,7 @@ class TangentHook(Complex):
     def _override_noninitial_context(c: Context) -> Context:
         assert c.angle is not None
         return Context(
-            None if c.angle is None else (c.angle - 90) % 360 if 90 < c.angle < 315 else (c.angle + 90) % 360,
+            (c.angle - 90) % 360 if 90 < c.angle < 315 else (c.angle + 90) % 360,
             not (90 < c.angle < 315),
         )
 
@@ -3798,7 +3857,7 @@ class TangentHook(Complex):
     def _override_initial_context(c: Context) -> Context:
         assert c.angle is not None
         return Context(
-            None if c.angle is None else (c.angle - 90) % 360 if 90 < c.angle < 315 else (c.angle + 90) % 360,
+            (c.angle - 90) % 360 if 90 < c.angle < 315 else (c.angle + 90) % 360,
             90 < c.angle < 315,
         )
 

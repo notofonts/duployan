@@ -1,4 +1,4 @@
-# Copyright 2019 David Corbett
+# Copyright 2019, 2022-2023 David Corbett
 # Copyright 2020-2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -66,13 +66,13 @@ from shapes import RightBoundDigit
 from shapes import SeparateAffix
 from shapes import Space
 from shapes import Start
-from shapes import WIDTH_MARKER_PLACES
-from shapes import WIDTH_MARKER_RADIX
 from shapes import WidthNumber
 from utils import GlyphClass
 from utils import MINIMUM_STROKE_GAP
 from utils import NO_CONTEXT
 from utils import OrderedSet
+from utils import WIDTH_MARKER_PLACES
+from utils import WIDTH_MARKER_RADIX
 
 
 def add_shims_for_pseudo_cursive(builder, original_schemas, schemas, new_schemas, classes, named_lookups, add_rule):
@@ -152,8 +152,8 @@ def add_shims_for_pseudo_cursive(builder, original_schemas, schemas, new_schemas
 
     marker = get_shim(0, 0)
 
-    def round_with_base(number, base, minimum):
-        return max(minimum, base * round(number / base), key=abs)
+    def round_with_base(number, base, minimum, key=None):
+        return max(minimum, base * round(number / base), key=key)
 
     for pseudo_cursive_index, (pseudo_cursive_class_name, (
         pseudo_cursive_is_space,
@@ -188,7 +188,7 @@ def add_shims_for_pseudo_cursive(builder, original_schemas, schemas, new_schemas
                 if exit_is_pseudo_cursive:
                     shim_height += pseudo_cursive_info[pseudo_cursive_schemas_to_classes[e_schema]][5]
                 shim_width = round_with_base(shim_width, rounding_base, MINIMUM_STROKE_GAP)
-                shim_height = round_with_base(shim_height, rounding_base, 0)
+                shim_height = round_with_base(shim_height, rounding_base, 0, abs)
                 e_class = f'{prefix}_shim_{pseudo_cursive_index}_{shim_width}_{shim_height}'.replace('-', 'n')
                 classes[e_class].append(e_schema)
                 if e_class not in e_classes:
@@ -209,7 +209,7 @@ def add_shims_for_pseudo_cursive(builder, original_schemas, schemas, new_schemas
 
 def shrink_wrap_enclosing_circle(builder, original_schemas, schemas, new_schemas, classes, named_lookups, add_rule):
     lookup = Lookup(
-        'rclt',
+        'rlig',
         {'DFLT', 'dupl'},
         'dflt',
         mark_filtering_set='i',
@@ -272,21 +272,29 @@ def add_width_markers(builder, original_schemas, schemas, new_schemas, classes, 
     anchor_width_markers = {}
     path_to_markers = {
         EntryWidthDigit: entry_width_markers,
+        AnchorWidthDigit: anchor_width_markers,
         LeftBoundDigit: left_bound_markers,
         RightBoundDigit: right_bound_markers,
-        AnchorWidthDigit: anchor_width_markers,
     }
-    start = Schema(None, Start(), 0)
+    start = next((s for s in schemas if isinstance(s.path, Start)), None)
+    if start is None:
+        start = Schema(None, Start(), 0)
+        classes[phases.CONTINUING_OVERLAP_OR_HUB_CLASS].append(start)
     hubs = {-1: []}
     for hub_priority in range(0, MAX_HUB_PRIORITY + 1):
         hub = next((s for s in schemas if isinstance(s.path, Hub) and s.path.priority == hub_priority), None)
         if hub is None:
-            hub = Schema(None, Hub(hub_priority), 0)
+            hub = Schema(None, Hub(hub_priority), 0, side_bearing=0)
             classes[phases.HUB_CLASS].append(hub)
             classes[phases.CONTINUING_OVERLAP_OR_HUB_CLASS].append(hub)
         hubs[hub_priority] = [hub]
-    end = Schema(None, End(), 0)
+    end = Schema(None, End(), 0, side_bearing=0)
     mark_anchor_selectors = {}
+
+    def register_mark_anchor_selector(index):
+        if index in mark_anchor_selectors:
+            return mark_anchor_selectors[index]
+        return mark_anchor_selectors.setdefault(index, Schema(None, MarkAnchorSelector(index), 0))
 
     def get_mark_anchor_selector(schema):
         only_anchor_class_name = None
@@ -294,18 +302,17 @@ def add_width_markers(builder, original_schemas, schemas, new_schemas, classes, 
             if type == 'mark' and anchor_class_name in anchors.ALL_MARK:
                 assert only_anchor_class_name is None, f'{schema} has multiple anchors: {only_anchor_class_name} and {anchor_class_name}'
                 only_anchor_class_name = anchor_class_name
-        index = anchors.ALL_MARK.index(only_anchor_class_name)
-        if index in mark_anchor_selectors:
-            return mark_anchor_selectors[index]
-        return mark_anchor_selectors.setdefault(index, Schema(None, MarkAnchorSelector(index), 0))
+        return register_mark_anchor_selector(anchors.ALL_MARK.index(only_anchor_class_name))
 
     glyph_class_selectors = {}
 
-    def get_glyph_class_selector(schema):
-        glyph_class = schema.glyph_class
+    def register_glyph_class_selector(glyph_class):
         if glyph_class in glyph_class_selectors:
             return glyph_class_selectors[glyph_class]
         return glyph_class_selectors.setdefault(glyph_class, Schema(None, GlyphClassSelector(glyph_class), 0))
+
+    def get_glyph_class_selector(schema):
+        return register_glyph_class_selector(schema.glyph_class)
 
     def register_width_marker(width_markers, digit_path, *args):
         if args not in width_markers:
@@ -339,15 +346,17 @@ def add_width_markers(builder, original_schemas, schemas, new_schemas, classes, 
             ))
         return width_number
 
+    schemas_needing_width_markers = []
     rules_to_add = []
     for schema in new_schemas:
         if schema not in original_schemas:
             continue
         if schema.glyph is None:
-            if isinstance(schema.path, MarkAnchorSelector):
-                mark_anchor_selectors[schema.path.index] = schema
-            elif isinstance(schema.path, GlyphClassSelector):
-                glyph_class_selectors[schema.glyph_class] = schema
+            match schema.path:
+                case MarkAnchorSelector():
+                    mark_anchor_selectors[schema.path.index] = schema
+                case GlyphClassSelector():
+                    glyph_class_selectors[schema.glyph_class] = schema
             if not isinstance(schema.path, Space):
                 # Not a schema created in `add_shims_for_pseudo_cursive`
                 continue
@@ -374,58 +383,60 @@ def add_width_markers(builder, original_schemas, schemas, new_schemas, classes, 
             entry_xs.setdefault(anchors.CONTINUING_OVERLAP, entry_xs[anchors.CURSIVE])
             exit_xs.setdefault(anchors.CONTINUING_OVERLAP, exit_xs[anchors.CURSIVE])
             start_x = entry_xs[anchors.CURSIVE if schema.glyph_class == GlyphClass.JOINER else anchor_class_name]
-            if schema.glyph is None:
-                x_min = x_max = 0
-            else:
-                x_min, _, x_max, _ = schema.glyph.boundingBox()
-            if x_min == x_max == 0:
-                x_min = entry_xs[anchors.CURSIVE]
-                x_max = exit_xs[anchors.CURSIVE]
-            if schema.glyph_class == GlyphClass.MARK:
-                mark_anchor_selector = [get_mark_anchor_selector(schema)]
-            else:
-                mark_anchor_selector = []
-            glyph_class_selector = get_glyph_class_selector(schema)
-            widths = []
-            for width, digit_path in [
-                (entry_xs[anchors.CURSIVE] - entry_xs[anchors.CONTINUING_OVERLAP], EntryWidthDigit),
-                (x_min - start_x, LeftBoundDigit),
-                (x_max - start_x, RightBoundDigit),
-                *[
-                    (
-                        exit_xs[anchor] - start_x if anchor in exit_xs else 0,
-                        AnchorWidthDigit,
-                    ) for anchor in anchors.ALL_MARK
-                ],
-                *[
-                    (
-                        exit_xs[anchor] - start_x if schema.glyph_class == GlyphClass.JOINER else 0,
-                        AnchorWidthDigit,
-                    ) for anchor in anchors.ALL_CURSIVE
-                ],
-            ]:
-                assert (width < WIDTH_MARKER_RADIX ** WIDTH_MARKER_PLACES / 2
-                    if width >= 0
-                    else width >= -WIDTH_MARKER_RADIX ** WIDTH_MARKER_PLACES / 2
-                    ), f'Glyph {schema} is too wide: {width} units'
-                widths.append(get_width_number(digit_path, width))
-            lookup = lookups[rule_count % lookups_per_position]
-            rule_count += 1
-            rules_to_add.append((
-                widths,
-                (lambda widths,
-                        lookup=lookup, glyph_class_selector=glyph_class_selector, mark_anchor_selector=mark_anchor_selector, schema=schema:
-                    add_rule(lookup, Rule([schema], [
-                        start,
-                        glyph_class_selector,
-                        *mark_anchor_selector,
-                        *hubs[schema.hub_priority],
-                        schema,
-                        *widths,
-                        end,
-                    ]))
-                ),
-            ))
+            schemas_needing_width_markers.append((schema, entry_xs, exit_xs, start_x))
+    for schema, entry_xs, exit_xs, start_x in schemas_needing_width_markers:
+        if schema.glyph is None:
+            x_min = x_max = 0
+        else:
+            x_min, _, x_max, _ = schema.glyph.boundingBox()
+        if x_min == x_max == 0:
+            x_min = entry_xs[anchors.CURSIVE]
+            x_max = exit_xs[anchors.CURSIVE]
+        if schema.glyph_class == GlyphClass.MARK:
+            mark_anchor_selector = [get_mark_anchor_selector(schema)]
+        else:
+            mark_anchor_selector = []
+        glyph_class_selector = get_glyph_class_selector(schema)
+        widths = []
+        for width, digit_path in [
+            (entry_xs[anchors.CURSIVE] - entry_xs[anchors.CONTINUING_OVERLAP], EntryWidthDigit),
+            (x_min - start_x, LeftBoundDigit),
+            (x_max - start_x, RightBoundDigit),
+            *[
+                (
+                    exit_xs[anchor] - start_x if anchor in exit_xs else 0,
+                    AnchorWidthDigit,
+                ) for anchor in anchors.ALL_MARK
+            ],
+            *[
+                (
+                    exit_xs[anchor] - start_x if schema.glyph_class == GlyphClass.JOINER else 0,
+                    AnchorWidthDigit,
+                ) for anchor in anchors.ALL_CURSIVE
+            ],
+        ]:
+            assert (width < WIDTH_MARKER_RADIX ** WIDTH_MARKER_PLACES / 2
+                if width >= 0
+                else width >= -WIDTH_MARKER_RADIX ** WIDTH_MARKER_PLACES / 2
+                ), f'Glyph {schema} is too wide: {width} units'
+            widths.append(get_width_number(digit_path, width))
+        lookup = lookups[rule_count * lookups_per_position // len(schemas_needing_width_markers)]
+        rule_count += 1
+        rules_to_add.append((
+            widths,
+            (lambda widths,
+                    lookup=lookup, glyph_class_selector=glyph_class_selector, mark_anchor_selector=mark_anchor_selector, schema=schema:
+                add_rule(lookup, Rule([schema], [
+                    start,
+                    glyph_class_selector,
+                    *mark_anchor_selector,
+                    *hubs[schema.hub_priority],
+                    schema,
+                    *widths,
+                    end,
+                ]))
+            ),
+        ))
     for widths, rule_to_add in rules_to_add:
         final_widths = []
         for width in widths:
@@ -434,7 +445,6 @@ def add_width_markers(builder, original_schemas, schemas, new_schemas, classes, 
             else:
                 final_widths.extend(width.to_digits(functools.partial(register_width_marker, path_to_markers[width.digit_path])))
         rule_to_add(final_widths)
-        rule_count -= 1
     return [
         *lookups,
         digit_expansion_lookup,
@@ -484,26 +494,27 @@ def clear_entry_width_markers(builder, original_schemas, schemas, new_schemas, c
     if 'zero' not in named_lookups:
         named_lookups['zero'] = Lookup(None, None, None)
     for schema in schemas:
-        if isinstance(schema.path, EntryWidthDigit):
-            classes['all'].append(schema)
-            classes[str(schema.path.place)].append(schema)
-            if schema.path.digit == 0:
-                zeros[schema.path.place] = schema
-        elif isinstance(schema.path, ContinuingOverlap):
-            classes['all'].append(schema)
-            continuing_overlap = schema
+        match schema.path:
+            case EntryWidthDigit():
+                classes['all'].append(schema)
+                classes['idx'].append(schema)
+                if schema.path.digit == 0:
+                    zeros[schema.path.place] = schema
+            case ContinuingOverlap():
+                classes['all'].append(schema)
+                continuing_overlap = schema
     for schema in new_schemas:
         if isinstance(schema.path, EntryWidthDigit) and schema.path.digit != 0:
             add_rule(named_lookups['zero'], Rule([schema], [zeros[schema.path.place]]))
     add_rule(lookup, Rule(
         [continuing_overlap],
-        [*map(str, range(WIDTH_MARKER_PLACES))],
+        ['idx'] * WIDTH_MARKER_PLACES,
         [],
         lookups=[None] * WIDTH_MARKER_PLACES,
     ))
     add_rule(lookup, Rule(
         [],
-        [*map(str, range(WIDTH_MARKER_PLACES))],
+        ['idx'] * WIDTH_MARKER_PLACES,
         [],
         lookups=['zero'] * WIDTH_MARKER_PLACES,
     ))
@@ -567,42 +578,47 @@ def sum_width_markers(builder, original_schemas, schemas, new_schemas, classes, 
         return glyph_class_selectors.setdefault(glyph_class, rv)
 
     for schema in schemas:
-        if isinstance(schema.path, ContinuingOverlap):
-            classes['all'].append(schema)
-            continuing_overlap = schema
-        elif isinstance(schema.path, Carry):
-            carry_schema = schema
-            original_carry_schemas.append(schema)
-            if schema in new_schemas:
+        match schema.path:
+            case ContinuingOverlap():
                 classes['all'].append(schema)
-        elif isinstance(schema.path, EntryWidthDigit):
-            entry_digit_schemas[schema.path.place * WIDTH_MARKER_RADIX + schema.path.digit] = schema
-            original_entry_digit_schemas.append(schema)
-            if schema in new_schemas:
-                classes['all'].append(schema)
-                classes[f'idx_{schema.path.place}'].append(schema)
-        elif isinstance(schema.path, LeftBoundDigit):
-            left_digit_schemas[schema.path.place * WIDTH_MARKER_RADIX + schema.path.digit] = schema
-            original_left_digit_schemas.append(schema)
-            if schema in new_schemas:
-                classes['all'].append(schema)
-                classes[f'ldx_{schema.path.place}'].append(schema)
-        elif isinstance(schema.path, RightBoundDigit):
-            right_digit_schemas[schema.path.place * WIDTH_MARKER_RADIX + schema.path.digit] = schema
-            original_right_digit_schemas.append(schema)
-            if schema in new_schemas:
-                classes['all'].append(schema)
-                classes[f'rdx_{schema.path.place}'].append(schema)
-        elif isinstance(schema.path, AnchorWidthDigit):
-            anchor_digit_schemas[schema.path.place * WIDTH_MARKER_RADIX + schema.path.digit] = schema
-            original_anchor_digit_schemas.append(schema)
-            if schema in new_schemas:
-                classes['all'].append(schema)
-                classes[f'adx_{schema.path.place}'].append(schema)
-        elif isinstance(schema.path, MarkAnchorSelector):
-            mark_anchor_selectors[schema.path.index] = schema
-        elif isinstance(schema.path, GlyphClassSelector):
-            glyph_class_selectors[schema.path.glyph_class] = schema
+                continuing_overlap = schema
+            case Carry():
+                carry_schema = schema
+                original_carry_schemas.append(schema)
+                if schema in new_schemas:
+                    classes['all'].append(schema)
+            case EntryWidthDigit():
+                entry_digit_schemas[schema.path.place * WIDTH_MARKER_RADIX + schema.path.digit] = schema
+                original_entry_digit_schemas.append(schema)
+                if schema in new_schemas:
+                    classes['all'].append(schema)
+                    classes[f'idx_{schema.path.place}'].append(schema)
+                    classes[f'iadx_{schema.path.place}'].append(schema)
+            case LeftBoundDigit():
+                left_digit_schemas[schema.path.place * WIDTH_MARKER_RADIX + schema.path.digit] = schema
+                original_left_digit_schemas.append(schema)
+                if schema in new_schemas:
+                    classes['all'].append(schema)
+                    classes[f'ldx_{schema.path.place}'].append(schema)
+            case RightBoundDigit():
+                right_digit_schemas[schema.path.place * WIDTH_MARKER_RADIX + schema.path.digit] = schema
+                original_right_digit_schemas.append(schema)
+                if schema in new_schemas:
+                    classes['all'].append(schema)
+                    classes[f'rdx_{schema.path.place}'].append(schema)
+            case AnchorWidthDigit():
+                anchor_digit_schemas[schema.path.place * WIDTH_MARKER_RADIX + schema.path.digit] = schema
+                original_anchor_digit_schemas.append(schema)
+                if schema in new_schemas:
+                    classes['all'].append(schema)
+                    classes[f'adx_{schema.path.place}'].append(schema)
+                    classes[f'iadx_{schema.path.place}'].append(schema)
+            case Dummy():
+                dummy = schema
+            case MarkAnchorSelector():
+                mark_anchor_selectors[schema.path.index] = schema
+            case GlyphClassSelector():
+                glyph_class_selectors[schema.path.glyph_class] = schema
     for (
         original_augend_schemas,
         augend_letter,
@@ -728,10 +744,10 @@ def sum_width_markers(builder, original_schemas, schemas, new_schemas, classes, 
                             if augend_letter == 'i' and addend_letter == 'a':
                                 context_in_lookup_context_in.append(get_glyph_class_selector(GlyphClass.JOINER, context_in_lookup_name))
                             context_in_lookup_context_in.append(augend_schema)
-                            context_in_lookup_context_in.extend([f'{augend_letter}dx_{augend_schema.path.place}'] * augend_skip_backtrack)
+                            context_in_lookup_context_in.extend([f'iadx_{augend_schema.path.place}'] * augend_skip_backtrack)
                             if augend_letter == 'a' and addend_letter == 'a':
                                 context_in_lookup_context_in.append(get_glyph_class_selector(GlyphClass.MARK, context_in_lookup_name))
-                                context_in_lookup_context_in.append(f'idx_{augend_schema.path.place}')
+                                context_in_lookup_context_in.append(f'iadx_{augend_schema.path.place}')
                             elif augend_skip_backtrack == 1:
                                 context_in_lookup_context_in.append(continuing_overlap)
                             elif augend_letter == 'a' and addend_letter == 'i' and augend_skip_backtrack != 0:
@@ -739,7 +755,7 @@ def sum_width_markers(builder, original_schemas, schemas, new_schemas, classes, 
                                     len(anchors.ALL) - augend_skip_backtrack - 1,
                                     context_in_lookup_name,
                                 ))
-                            context_in_lookup_context_in.extend([f'{addend_letter}dx_{sum_digit_schema.path.place}'] * addend_skip_backtrack)
+                            context_in_lookup_context_in.extend([f'iadx_{sum_digit_schema.path.place}'] * addend_skip_backtrack)
                             add_rule(named_lookups[context_in_lookup_name], Rule(
                                 context_in_lookup_context_in,
                                 [addend_schema],
@@ -782,14 +798,15 @@ def calculate_bound_extrema(builder, original_schemas, schemas, new_schemas, cla
     )
     right_digit_schemas = {}
     for schema in schemas:
-        if isinstance(schema.path, LeftBoundDigit):
-            left_digit_schemas[schema.path.place * WIDTH_MARKER_RADIX + schema.path.digit] = schema
-            if schema in new_schemas:
-                classes['ldx'].append(schema)
-        elif isinstance(schema.path, RightBoundDigit):
-            right_digit_schemas[schema.path.place * WIDTH_MARKER_RADIX + schema.path.digit] = schema
-            if schema in new_schemas:
-                classes['rdx'].append(schema)
+        match schema.path:
+            case LeftBoundDigit():
+                left_digit_schemas[schema.path.place * WIDTH_MARKER_RADIX + schema.path.digit] = schema
+                if schema in new_schemas:
+                    classes['ldx'].append(schema)
+            case RightBoundDigit():
+                right_digit_schemas[schema.path.place * WIDTH_MARKER_RADIX + schema.path.digit] = schema
+                if schema in new_schemas:
+                    classes['rdx'].append(schema)
     for place in range(WIDTH_MARKER_PLACES - 1, -1, -1):
         for i in range(0, WIDTH_MARKER_RADIX):
             left_schema_i = left_digit_schemas.get(place * WIDTH_MARKER_RADIX + i)
@@ -875,16 +892,17 @@ def find_real_hub(builder, original_schemas, schemas, new_schemas, classes, name
     )
     hubs = collections.defaultdict(list)
     for schema in new_schemas:
-        if isinstance(schema.path, Dummy):
-            dummy = schema
-        elif isinstance(schema.path, Hub):
-            hubs[schema.path.priority].append(schema)
-            classes['all'].append(schema)
-        elif isinstance(schema.path, InitialSecantMarker):
-            classes['all'].append(schema)
-        elif isinstance(schema.path, ContinuingOverlap):
-            continuing_overlap = schema
-            classes['all'].append(schema)
+        match schema.path:
+            case Dummy():
+                dummy = schema
+            case Hub():
+                hubs[schema.path.priority].append(schema)
+                classes['all'].append(schema)
+            case InitialSecantMarker():
+                classes['all'].append(schema)
+            case ContinuingOverlap():
+                continuing_overlap = schema
+                classes['all'].append(schema)
     for priority_a, hubs_a in sorted(hubs.items()):
         for priority_b, hubs_b in sorted(hubs.items()):
             for hub_a in hubs_a:
@@ -937,15 +955,16 @@ def mark_maximum_bounds(builder, original_schemas, schemas, new_schemas, classes
     new_anchor_widths = []
     end = next(s for s in schemas if isinstance(s.path, End))
     for schema in new_schemas:
-        if isinstance(schema.path, LeftBoundDigit):
-            classes['ldx'].append(schema)
-            new_left_bounds.append(schema)
-        elif isinstance(schema.path, RightBoundDigit):
-            classes['rdx'].append(schema)
-            new_right_bounds.append(schema)
-        elif isinstance(schema.path, AnchorWidthDigit):
-            classes['adx'].append(schema)
-            new_anchor_widths.append(schema)
+        match schema.path:
+            case LeftBoundDigit():
+                classes['ldx'].append(schema)
+                new_left_bounds.append(schema)
+            case RightBoundDigit():
+                classes['rdx'].append(schema)
+                new_right_bounds.append(schema)
+            case AnchorWidthDigit():
+                classes['adx'].append(schema)
+                new_anchor_widths.append(schema)
     for new_digits, lookup, class_name, digit_path, status in [
         (new_left_bounds, left_lookup, 'ldx', LeftBoundDigit, DigitStatus.ALMOST_DONE),
         (new_right_bounds, right_lookup, 'rdx', RightBoundDigit, DigitStatus.DONE),
@@ -1007,13 +1026,18 @@ def dist(builder, original_schemas, schemas, new_schemas, classes, named_lookups
                 or isinstance(schema.path, RightBoundDigit)
                 or isinstance(schema.path, AnchorWidthDigit))
                 and schema.path.status == DigitStatus.DONE):
+            place = schema.path.place
             digit = schema.path.digit
-            if schema.path.place == WIDTH_MARKER_PLACES - 1 and digit >= WIDTH_MARKER_RADIX / 2:
+            if isinstance(schema.path, LeftBoundDigit):
+                digit = WIDTH_MARKER_RADIX - 1 - digit
+                if place == 0:
+                    digit += 1
+            if place == WIDTH_MARKER_PLACES - 1 and digit >= WIDTH_MARKER_RADIX / 2:
                 digit -= WIDTH_MARKER_RADIX
-            x_advance = digit * WIDTH_MARKER_RADIX ** schema.path.place
-            if not isinstance(schema.path, RightBoundDigit):
+            x_advance = digit * WIDTH_MARKER_RADIX ** place
+            if isinstance(schema.path, AnchorWidthDigit):
                 x_advance = -x_advance
-            if schema.path.place == 0 and not isinstance(schema.path, AnchorWidthDigit):
+            elif place == 0:
                 x_advance += DEFAULT_SIDE_BEARING
             if x_advance:
                 add_rule(lookup, Rule([], [schema], [], x_advances=[x_advance]))

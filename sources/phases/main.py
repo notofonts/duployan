@@ -1,4 +1,4 @@
-# Copyright 2018-2019 David Corbett
+# Copyright 2018-2019, 2022-2023 David Corbett
 # Copyright 2019-2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -57,8 +57,13 @@ __all__ = [
 
 
 import collections
+from collections.abc import MutableSequence
+from collections.abc import Sequence
 import functools
 import itertools
+from typing import Iterable
+from typing import Optional
+from typing import TypeVar
 
 
 import fontTools.otlLib.builder
@@ -127,7 +132,7 @@ def reversed_circle_kludge(builder, original_schemas, schemas, new_schemas, clas
 
 def validate_shading(builder, original_schemas, schemas, new_schemas, classes, named_lookups, add_rule):
     lookup = Lookup(
-        'rclt',
+        'rlig',
         'dupl',
         'dflt',
         mark_filtering_set='independent_mark',
@@ -148,7 +153,7 @@ def validate_shading(builder, original_schemas, schemas, new_schemas, classes, n
 
 def validate_double_marks(builder, original_schemas, schemas, new_schemas, classes, named_lookups, add_rule):
     lookup = Lookup(
-        'rclt',
+        'rlig',
         'dupl',
         'dflt',
         mark_filtering_set='double_mark',
@@ -219,6 +224,9 @@ def validate_overlap_controls(builder, original_schemas, schemas, new_schemas, c
         'dflt',
         mark_filtering_set='overlap',
     )
+    if len(original_schemas) != len(schemas):
+        return [lookup]
+    named_lookups['validate'] = Lookup(None, None, None)
     new_classes = {}
     global_max_tree_width = 0
     for schema in new_schemas:
@@ -231,7 +239,7 @@ def validate_overlap_controls(builder, original_schemas, schemas, new_schemas, c
             else:
                 letter_overlap = schema
         elif not schema.anchor:
-            if max_tree_width := schema.path.max_tree_width(schema.size):
+            if max_tree_width := schema.max_tree_width():
                 if max_tree_width > global_max_tree_width:
                     global_max_tree_width = max_tree_width
                 classes['base'].append(schema)
@@ -248,17 +256,17 @@ def validate_overlap_controls(builder, original_schemas, schemas, new_schemas, c
     classes['overlap'].append(valid_letter_overlap)
     classes['overlap'].append(valid_continuing_overlap)
     add_rule(lookup, Rule('invalid', 'invalid', [], lookups=[None]))
-    add_rule(lookup, Rule('valid', 'invalid', [], 'valid'))
+    add_rule(named_lookups['validate'], Rule('invalid', 'valid'))
+    add_rule(lookup, Rule('valid', 'invalid', [], lookups=['validate']))
     for i in range(global_max_tree_width - 2):
         add_rule(lookup, Rule([], [letter_overlap], [*[letter_overlap] * i, continuing_overlap, 'invalid'], lookups=[None]))
     if global_max_tree_width > 1:
         add_rule(lookup, Rule([], [continuing_overlap], 'invalid', lookups=[None]))
     for max_tree_width, new_class in new_classes.items():
         add_rule(lookup, Rule([new_class], 'invalid', ['invalid'] * max_tree_width, lookups=[None]))
-    add_rule(lookup, Rule(['base'], [letter_overlap], [], [valid_letter_overlap]))
     classes['base'].append(valid_letter_overlap)
-    add_rule(lookup, Rule(['base'], [continuing_overlap], [], [valid_continuing_overlap]))
     classes['base'].append(valid_continuing_overlap)
+    add_rule(lookup, Rule('base', 'invalid', [], lookups=['validate']))
     classes[phases.CHILD_EDGE_CLASSES[0]].append(valid_letter_overlap)
     classes[phases.INTER_EDGE_CLASSES[0][0]].append(valid_letter_overlap)
     classes[phases.CONTINUING_OVERLAP_CLASS].append(valid_continuing_overlap)
@@ -286,7 +294,20 @@ def add_parent_edges(builder, original_schemas, schemas, new_schemas, classes, n
     return [lookup]
 
 
-def _make_trees(node, edge, maximum_depth, *, top_widths=None, prefix_depth=None):
+_E = TypeVar('_E')
+
+
+_N = TypeVar('_N')
+
+
+def _make_trees(
+    node: _N,
+    edge: _E,
+    maximum_depth: int,
+    *,
+    top_widths: Optional[Iterable[int]] = None,
+    prefix_depth: Optional[int] = None,
+) -> Sequence[Sequence[_E | _N]]:
     if maximum_depth <= 0:
         return []
     trees = []
@@ -294,7 +315,7 @@ def _make_trees(node, edge, maximum_depth, *, top_widths=None, prefix_depth=None
         subtrees = _make_trees(node, edge, maximum_depth - 1)
         for width in range(MAX_TREE_WIDTH + 1) if top_widths is None else top_widths:
             for index_set in itertools.product(range(len(subtrees)), repeat=width):
-                tree = [node, *[edge] * width] if top_widths is None else []
+                tree: MutableSequence[_E | _N] = [node, *[edge] * width] if top_widths is None else []
                 for i in index_set:
                     tree.extend(subtrees[i])
                 trees.append(tree)
@@ -325,22 +346,26 @@ def invalidate_overlap_controls(builder, original_schemas, schemas, new_schemas,
         reversed=True,
     )
     for schema in new_schemas:
-        if isinstance(schema.path, ParentEdge):
-            node = schema
-            classes['all'].append(schema)
-        elif isinstance(schema.path, RootOnlyParentEdge):
-            classes['all'].append(schema)
-        elif isinstance(schema.path, ChildEdge):
-            valid_letter_overlap = schema
-            classes['all'].append(schema)
-        elif isinstance(schema.path, ContinuingOverlap):
-            valid_continuing_overlap = schema
-            classes['all'].append(schema)
-        elif isinstance(schema.path, InvalidOverlap):
-            if schema.path.continuing:
+        match schema.path:
+            case ParentEdge():
+                node = schema
+                classes['all'].append(schema)
+            case RootOnlyParentEdge():
+                root_only_parent_edge = schema
+                classes['all'].append(schema)
+            case ChildEdge():
+                valid_letter_overlap = schema
+                classes['all'].append(schema)
+            case ContinuingOverlap():
+                valid_continuing_overlap = schema
+                classes['all'].append(schema)
+            case InvalidOverlap(continuing=True):
                 invalid_continuing_overlap = schema
-            else:
-                invalid_letter_overlap = schema
+            case InvalidOverlap():
+                if schema.path.continuing:
+                    invalid_continuing_overlap = schema
+                else:
+                    invalid_letter_overlap = schema
     classes['valid'].append(valid_letter_overlap)
     classes['valid'].append(valid_continuing_overlap)
     classes['invalid'].append(invalid_letter_overlap)
@@ -349,8 +374,6 @@ def invalidate_overlap_controls(builder, original_schemas, schemas, new_schemas,
     for older_sibling_count in range(MAX_TREE_WIDTH - 1, -1, -1):
         # A continuing overlap not at the top level must be licensed by an
         # ancestral continuing overlap.
-        # TODO: Optimization: All but the youngest child can use
-        # `valid_letter_overlap` instead of `'valid'`.
         for subtrees in _make_trees(node, 'valid', MAX_TREE_DEPTH, top_widths=[older_sibling_count]):
             for older_sibling_count_of_continuing_overlap in range(MAX_TREE_WIDTH):
                 add_rule(lookup, Rule(
@@ -372,8 +395,6 @@ def invalidate_overlap_controls(builder, original_schemas, schemas, new_schemas,
                 ))
         # Anything valid needs to be explicitly kept valid, since there might
         # not be enough context to tell that an invalid overlap is invalid.
-        # TODO: Optimization: The last subtree can just be one node instead of
-        # the full subtree.
         for subtrees in _make_trees(node, 'valid', MAX_TREE_DEPTH, top_widths=[older_sibling_count + 1]):
             add_rule(lookup, Rule(
                 [valid_letter_overlap] * older_sibling_count if older_sibling_count else [node],
@@ -408,10 +429,16 @@ def add_secant_guidelines(builder, original_schemas, schemas, new_schemas, class
         ):
             classes['secant'].append(schema)
             zwnj = Schema(None, Space(0, margins=True), 0, Type.NON_JOINING, side_bearing=0)
-            guideline_angle = 270 if 45 <= (schema.path.angle + 90) % 180 < 135 else 0
-            guideline = Schema(None, Line(guideline_angle, dots=7), 1.5)
-            add_rule(lookup, Rule([schema], [invalid_continuing_overlap], [initial_secant_marker, dtls], [dtls, valid_continuing_overlap, guideline]))
-            add_rule(lookup, Rule([schema], [invalid_continuing_overlap], [], [valid_continuing_overlap, guideline]))
+            guideline_angle = schema.path.get_guideline_angle()
+            lookup_name = f'add_guideline_{guideline_angle}'
+            if lookup_name not in named_lookups:
+                guideline = Schema(None, Line(guideline_angle, dots=7), 1.5)
+                named_lookups[f'{lookup_name}_and_dtls'] = Lookup(None, None, None)
+                named_lookups[lookup_name] = Lookup(None, None, None)
+                add_rule(named_lookups[f'{lookup_name}_and_dtls'], Rule([invalid_continuing_overlap], [dtls, valid_continuing_overlap, guideline]))
+                add_rule(named_lookups[lookup_name], Rule([invalid_continuing_overlap], [valid_continuing_overlap, guideline]))
+            add_rule(lookup, Rule([schema], [invalid_continuing_overlap], [initial_secant_marker, dtls], lookups=[f'{lookup_name}_and_dtls']))
+            add_rule(lookup, Rule([schema], [invalid_continuing_overlap], [], lookups=[lookup_name]))
     add_rule(named_lookups['prepend_zwnj'], Rule('secant', [zwnj, 'secant']))
     add_rule(lookup, Rule([], 'secant', [], lookups=['prepend_zwnj']))
     return [lookup]
@@ -440,7 +467,7 @@ def add_placeholders_for_missing_children(builder, original_schemas, schemas, ne
         elif isinstance(schema.path, ContinuingOverlap):
             classes['valid_final_overlap'].append(schema)
         elif (schema.glyph_class == GlyphClass.JOINER
-            and (max_tree_width := schema.path.max_tree_width(schema.size)) > 1
+            and (max_tree_width := schema.max_tree_width()) > 1
         ):
             new_class = f'base_{max_tree_width}'
             classes[new_class].append(schema)
@@ -448,31 +475,33 @@ def add_placeholders_for_missing_children(builder, original_schemas, schemas, ne
     root_parent_edge = next(s for s in schemas if isinstance(s.path, ParentEdge))
     placeholder = Schema(None, Space(0), 0, Type.JOINING, side_bearing=0, child=True)
     for max_tree_width, base_class in base_classes.items():
+        inputs = [valid_letter_overlap] * (max_tree_width - 1) + ['valid_final_overlap']
         add_rule(lookup_1, Rule(
             [base_class],
-            [valid_letter_overlap],
-            [valid_letter_overlap] * (max_tree_width - 2) + ['valid_final_overlap'],
-            lookups=[None],
+            inputs,
+            [],
+            lookups=[None] * len(inputs),
         ))
         add_rule(lookup_2, Rule(
-            [],
             [base_class],
-            [valid_letter_overlap] * (max_tree_width - 1) + ['valid_final_overlap'],
-            lookups=[None],
+            inputs,
+            [],
+            lookups=[None] * len(inputs),
         ))
         for sibling_count in range(max_tree_width - 1, 0, -1):
+            backtrack_list = [base_class] + [valid_letter_overlap] * (sibling_count - 1)
             input_1 = 'valid_final_overlap' if sibling_count > 1 else valid_letter_overlap
             add_rule(lookup_1, Rule(
-                [base_class] + [valid_letter_overlap] * (sibling_count - 1),
+                backtrack_list,
                 [input_1],
                 [],
                 [input_1] + [root_parent_edge, placeholder] * sibling_count,
             ))
             add_rule(lookup_2, Rule(
+                backtrack_list,
+                [input_1],
                 [],
-                [base_class],
-                [valid_letter_overlap] * (sibling_count - 1) + [input_1],
-                [base_class] + [valid_letter_overlap] * sibling_count,
+                [valid_letter_overlap, input_1],
             ))
     return [lookup_1, lookup_2]
 
@@ -539,7 +568,7 @@ def categorize_edges(builder, original_schemas, schemas, new_schemas, classes, n
                 add_rule(lookup, Rule([edge], [default_parent_edge], [], [new_parent_edge]))
             elif isinstance(edge.path, ParentEdge) and edge.path.lineage:
                 lineage = list(edge.path.lineage)
-                if len(lineage) < MAX_TREE_DEPTH:
+                if len(lineage) < MAX_TREE_DEPTH - 1:
                     lineage.append((1, lineage[-1][0]))
                     new_child_edge = get_child_edge(lineage)
                     classes[phases.CHILD_EDGE_CLASSES[lineage[-1][0] - 1]].append(new_child_edge)
@@ -563,18 +592,19 @@ def promote_final_letter_overlap_to_continuing_overlap(builder, original_schemas
     if len(original_schemas) != len(schemas):
         return [lookup]
     for schema in new_schemas:
-        if isinstance(schema.path, ChildEdge):
-            classes['overlap'].append(schema)
-            if all(x[0] == x[1] for x in schema.path.lineage[:-1]):
-                classes['final_letter_overlap'].append(schema)
-        elif isinstance(schema.path, ContinuingOverlap):
-            continuing_overlap = schema
-            classes['overlap'].append(schema)
-        elif isinstance(schema.path, ParentEdge) and not schema.path.lineage:
-            root_parent_edge = schema
-            classes['secant_or_root_parent_edge'].append(schema)
-        elif isinstance(schema.path, Line) and schema.path.secant and schema.glyph_class == GlyphClass.MARK:
-            classes['secant_or_root_parent_edge'].append(schema)
+        match schema.path:
+            case ChildEdge():
+                classes['overlap'].append(schema)
+                if all(x[0] == x[1] for x in schema.path.lineage[:-1]):
+                    classes['final_letter_overlap'].append(schema)
+            case ContinuingOverlap():
+                continuing_overlap = schema
+                classes['overlap'].append(schema)
+            case ParentEdge(lineage=[]):
+                root_parent_edge = schema
+                classes['secant_or_root_parent_edge'].append(schema)
+            case Line() if schema.path.secant and schema.glyph_class == GlyphClass.MARK:
+                classes['secant_or_root_parent_edge'].append(schema)
     add_rule(lookup, Rule([], 'final_letter_overlap', 'overlap', lookups=[None]))
     named_lookups['promote'] = Lookup(None, None, None)
     add_rule(named_lookups['promote'], Rule('final_letter_overlap', [continuing_overlap]))
@@ -639,7 +669,7 @@ def reposition_chinook_jargon_overlap_points(builder, original_schemas, schemas,
             elif not schema.path.invisible():
                 classes['all'].append(schema)
         elif schema.glyph_class == GlyphClass.JOINER:
-            if schema.path.max_tree_width(schema.size) == 0:
+            if schema.max_tree_width() == 0:
                 continue
             if (isinstance(schema.path, Line)
                 and (schema.size == 1 or schema.cps == [0x1BC07])
@@ -647,7 +677,7 @@ def reposition_chinook_jargon_overlap_points(builder, original_schemas, schemas,
                 and not schema.path.dots
             ):
                 angle = schema.path.angle
-                max_tree_width = schema.path.max_tree_width(schema.size)
+                max_tree_width = schema.max_tree_width()
                 line_class = f'line_{angle}_{max_tree_width}'
                 classes['line'].append(schema)
                 classes[line_class].append(schema)
@@ -665,7 +695,7 @@ def reposition_chinook_jargon_overlap_points(builder, original_schemas, schemas,
     for curve in classes['curve']:
         if curve in new_schemas:
             for line_class, (angle, _) in line_classes.items():
-                for width in range(1, curve.path.max_tree_width(curve.size) + 1):
+                for width in range(1, curve.max_tree_width() + 1):
                     add_rule(lookup, Rule(
                         [],
                         [curve],
@@ -1223,7 +1253,7 @@ def join_circle_with_adjacent_nonorienting_glyph(builder, original_schemas, sche
 
 def ligate_diphthongs(builder, original_schemas, schemas, new_schemas, classes, named_lookups, add_rule):
     lookup = Lookup(
-        'rlig',
+        'rclt',
         {'DFLT', 'dupl'},
         'dflt',
         mark_filtering_set='ignored_for_topography',
@@ -1404,7 +1434,7 @@ def join_double_marks(builder, original_schemas, schemas, new_schemas, classes, 
 
 def rotate_diacritics(builder, original_schemas, schemas, new_schemas, classes, named_lookups, add_rule):
     lookup = Lookup(
-        'rclt',
+        'rlig',
         {'DFLT', 'dupl'},
         'dflt',
         mark_filtering_set='all',
@@ -1472,17 +1502,17 @@ def shade(builder, original_schemas, schemas, new_schemas, classes, named_lookup
 
 def create_diagonal_fractions(builder, original_schemas, schemas, new_schemas, classes, named_lookups, add_rule):
     lookup_slash = Lookup(
-        'rclt',
+        'rlig',
         {'DFLT', 'dupl'},
         'dflt',
     )
     lookup_dnom = Lookup(
-        'rclt',
+        'rlig',
         {'DFLT', 'dupl'},
         'dflt',
     )
     lookup_numr = Lookup(
-        'rclt',
+        'rlig',
         {'DFLT', 'dupl'},
         'dflt',
         reversed=True,
@@ -1524,7 +1554,7 @@ def create_superscripts_and_subscripts(builder, original_schemas, schemas, new_s
 
 
 def make_widthless_variants_of_marks(builder, original_schemas, schemas, new_schemas, classes, named_lookups, add_rule):
-    lookup = Lookup('rclt', {'DFLT', 'dupl'}, 'dflt')
+    lookup = Lookup('rlig', {'DFLT', 'dupl'}, 'dflt')
     first_iteration = 'i' not in classes
     for schema in new_schemas:
         if schema.glyph_class == GlyphClass.MARK:

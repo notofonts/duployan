@@ -44,7 +44,7 @@ fonts/$(FONT_FAMILY_NAME)/unhinted/otf/NotoSansDuployan-Bold.otf: sources/Duploy
 
 $(addprefix fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/%.ttf: fonts/$(FONT_FAMILY_NAME)/unhinted/otf/%.otf venv
 	mkdir -p "$$(dirname "$@")"
-	. venv/bin/activate ; otf2ttf --output "$@" --overwrite "$<"
+	. venv/bin/activate ; python sources/otf2ttf.py --output "$@" --overwrite "$<"
 
 $(addprefix fonts/$(FONT_FAMILY_NAME)/hinted/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/hinted/ttf/%.ttf: fonts/$(FONT_FAMILY_NAME)/unhinted/otf/%.otf venv
 	mkdir -p "$$(dirname "$@")"

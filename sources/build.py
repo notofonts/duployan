@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # Copyright 2010-2019 Khaled Hosny <khaledhosny@eglug.org>
-# Copyright 2018-2019 David Corbett
+# Copyright 2018-2019, 2022 David Corbett
 # Copyright 2020-2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,13 +28,10 @@ from typing import Any
 import fontforge
 import fontTools.cffLib
 import fontTools.misc.timeTools
-import fontTools.otlLib.builder
 import fontTools.ttLib
-import fontTools.ttLib.tables.otBase
 import fontTools.ttLib.ttFont
 
 import duployan
-import fonttools_patches
 import utils
 
 
@@ -65,10 +62,6 @@ def generate_feature_string(font: fontforge.font, lookup: str) -> str:
     with tempfile.NamedTemporaryFile() as fea_file:
         font.generateFeatureFile(fea_file.name, lookup)
         return fea_file.read().decode('utf-8')
-
-
-def patch_fonttools() -> None:
-    fontTools.ttLib.tables.otBase.BaseTTXConverter.compile = fonttools_patches.compile
 
 
 def set_noto_values(tt_font: fontTools.ttLib.ttFont.TTFont) -> None:
@@ -254,7 +247,6 @@ def make_font(options: argparse.Namespace) -> None:
     builder = duployan.Builder(font, options.bold, options.noto)
     builder.augment()
     build_font(options, builder.font)
-    patch_fonttools()
     tweak_font(options, builder)
 
 

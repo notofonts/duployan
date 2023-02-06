@@ -1,4 +1,4 @@
-# Copyright 2018-2019 David Corbett
+# Copyright 2018-2019, 2022-2023 David Corbett
 # Copyright 2019-2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,12 +22,10 @@ from collections.abc import Mapping
 from collections.abc import MutableMapping
 from collections.abc import MutableSequence
 from collections.abc import Sequence
-import enum
-import itertools
 import io
 import math
-import re
 from typing import Any
+from typing import Callable
 from typing import Final
 from typing import Optional
 from typing import Tuple
@@ -164,7 +162,7 @@ class Builder:
         notdef = Notdef()
         space = Space(0, margins=True)
         h = Dot()
-        exclamation = Complex([(1, h), (201, Space(90)), (1.109, Line(90))])
+        exclamation = Complex([(2, h), (244, Space(90)), (1.109, Line(90))])
         dollar = Complex([(2.58, Curve(180 - 18, 180 + 26, clockwise=False, stretch=2.058, long=True, relative_stretch=False)), (2.88, Curve(180 + 26, 360 - 8, clockwise=False, stretch=0.5, long=True, relative_stretch=False)), (0.0995, Line(360 - 8)), (2.88, Curve(360 - 8, 180 + 26, clockwise=True, stretch=0.5, long=True, relative_stretch=False)), (2.58, Curve(180 + 26, 180 - 18, clockwise=True, stretch=2.058, long=True, relative_stretch=False)), (151.739, Space(328.952)), (1.484, Line(90)), (140, Space(0)), (1.484, Line(270))])
         asterisk = Complex([(310, Space(90)), (0.467, Line(90)), (0.467, Line(198)), (0.467, Line(18), False), (0.467, Line(126)), (0.467, Line(306), False), (0.467, Line(54)), (0.467, Line(234), False), (0.467, Line(342))])
         plus = Complex([(146, Space(90)), (0.828, Line(90)), (0.414, Line(270)), (0.414, Line(180)), (0.828, Line(0))])
@@ -180,14 +178,18 @@ class Builder:
         seven = Complex([(0.818, Line(0)), (1.36, Line(246))])
         eight = Complex([(2.88, Curve(180, 90, clockwise=True)), (2.88, Curve(90, 270, clockwise=True)), (2.88, Curve(270, 180, clockwise=True)), (3.16, Curve(180, 270, clockwise=False)), (3.16, Curve(270, 90, clockwise=False)), (3.16, Curve(90, 180, clockwise=False))])
         nine = Complex([(3.5, Circle(270, 270, clockwise=True)), (35.1, Curve(270, 260, clockwise=True, stretch=0.45)), (4, Curve(255, 175, clockwise=True))])
-        colon = Complex([(1, h), (509, Space(90)), (1, h)])
-        semicolon = Complex([*comma.instructions, (3, Curve(41, 101, clockwise=False), True), (0.5, Circle(101, 180, clockwise=False), True), (416, Space(90)), (1, h)])
-        question = Complex([(1, h), (201, Space(90)), (4.162, Curve(90, 45, clockwise=True)), (0.16, Line(45)), (4.013, Curve(45, 210, clockwise=False))])
+        colon = Complex([(2, h), (408, Space(90)), (2, h)])
+        semicolon = Complex([*comma.instructions, (3, Curve(41, 101, clockwise=False), True), (0.5, Circle(101, 180, clockwise=False), True), (388, Space(90)), (2, h)])
+        question = Complex([(2, h), (244, Space(90)), (4.162, Curve(90, 45, clockwise=True)), (0.16, Line(45)), (4.013, Curve(45, 210, clockwise=False))])
         less_than = Complex([(1, Line(153)), (1, Line(27))])
         equal = Complex([(305, Space(90)), (1, Line(0)), (180, Space(90)), (1, Line(180)), (90, Space(270)), (1, Line(0), True)], maximum_tree_width=1)
         greater_than = Complex([(1, Line(27)), (1, Line(153))])
         left_bracket = Complex([(0.45, Line(180)), (2.059, Line(90)), (0.45, Line(0))])
         right_bracket = Complex([(0.45, Line(0)), (2.059, Line(90)), (0.45, Line(180))])
+        left_ceiling = Complex([(2.059, Line(90)), (0.45, Line(0))])
+        right_ceiling = Complex([(2.059, Line(90)), (0.45, Line(180))])
+        left_floor = Complex([(0.45, Line(180)), (2.059, Line(90))])
+        right_floor = Complex([(0.45, Line(0)), (2.059, Line(90))])
         guillemet_vertical_space = (75, Space(90))
         guillemet_horizontal_space = (200, Space(0))
         left_guillemet = [(0.524, Line(129.89)), (0.524, Line(50.11))]
@@ -206,24 +208,23 @@ class Builder:
         circumflex = Complex([(1, Line(25)), (1, Line(335))])
         macron = Line(0)
         breve = Curve(270, 90, clockwise=False, stretch=0.2)
-        diaeresis = Line(0, dots=2)
+        diaeresis = Complex([(2, h), (Dot.SCALAR * 10 / 7 * light_line, Space(0)), (2, h)])
         caron = Complex([(1, Line(335)), (1, Line(25))])
         inverted_breve = Curve(90, 270, clockwise=False, stretch=0.2)
         en_dash = Complex([(395, Space(90)), (1, Line(0))])
         high_left_quote = Complex([(755, Space(90)), (3, Curve(221, 281, clockwise=False)), (0.5, Circle(281, 281, clockwise=False)), (160, Space(0)), (0.5, Circle(101, 101, clockwise=True)), (3, Curve(101, 41, clockwise=True))])
         high_right_quote = Complex([(742, Space(90)), (0.5, Circle(281, 281, clockwise=True)), (3, Curve(281, 221, clockwise=True)), (160, Space(0)), (3, Curve(41, 101, clockwise=False)), (0.5, Circle(101, 180, clockwise=False))])
         low_right_quote = Complex([(35, Space(0)), (0.5, Circle(281, 281, clockwise=True)), (3, Curve(281, 221, clockwise=True)), (160, Space(0)), (3, Curve(41, 101, clockwise=False)), (0.5, Circle(101, 180, clockwise=False))])
-        ellipsis = Complex([(1, h), (148, Space(0)), (1, h), (148, Space(0)), (1, h)])
+        ellipsis = Complex([(2, h), (196, Space(0)), (2, h), (196, Space(0)), (2, h)])
         nnbsp = Space(0)
         dotted_circle = Complex([(33, Space(90)), (1, h), (446, Space(90)), (1, h), (223, Space(270)), (223, Space(60)), (1, h), (446, Space(240)), (1, h), (223, Space(60)), (223, Space(30)), (1, h), (446, Space(210)), (1, h), (223, Space(30)), (223, Space(0)), (1, h), (446, Space(180)), (1, h), (223, Space(0)), (223, Space(330)), (1, h), (446, Space(150)), (1, h), (223, Space(330)), (223, Space(300)), (1, h), (446, Space(120)), (1, h)])
-        skull_and_crossbones = Complex([(7, Circle(180, 180, clockwise=False, stretch=0.4, long=True)), (7 * 2 * 1.4 * RADIUS * 0.55, Space(270)), (0.5, Circle(180, 180, clockwise=False)), (7 * 2 * 1.4 * RADIUS / math.sqrt(3) / 2.5, Space(120)), (0.5, Circle(180, 180, clockwise=False)), (7 * 2 * 1.4 * RADIUS / math.sqrt(3) / 2.5, Space(0)), (0.5, Circle(180, 180, clockwise=False)), (7 * 2 * 1.4 * RADIUS / math.sqrt(3) / 2.5, Space(240)), (7 * 2 * 1.4 * RADIUS * 0.3, Space(270)), (1, h), (150, Space(160)), (1, h), (150, Space(340)), (150, Space(20)), (1, h), (150, Space(200)), (7 * 2 * 1.4 * RADIUS / 2, Space(270)), (7 * 2 * 1.4 * RADIUS / LINE_FACTOR / 2, Line(150), False), (2.1, Curve(60, 90, clockwise=False), True), (2.1, Curve(270, 210, clockwise=True)), (2.1, Curve(30, 60, clockwise=False), True), (7 * 2 * 1.4 * RADIUS / LINE_FACTOR, Line(330)), (2.1, Curve(60, 30, clockwise=True), True), (2.1, Curve(210, 270, clockwise=False)), (2.1, Curve(90, 60, clockwise=True), True), (7 * 2 * 1.4 * RADIUS / LINE_FACTOR / 2, Line(150), True), (7 * 2 * 1.4 * RADIUS / LINE_FACTOR / 2, Line(30), True), (2.1, Curve(120, 90, clockwise=True)), (2.1, Curve(270, 330, clockwise=False)), (2.1, Curve(150, 120, clockwise=True), True), (7 * 2 * 1.4 * RADIUS / LINE_FACTOR, Line(210)), (2.1, Curve(120, 150, clockwise=False), True), (2.1, Curve(330, 270, clockwise=True)), (2.1, Curve(90, 120, clockwise=False), True)])
-        stenographic_period = Complex([(0.5, Line(135)), *multiplication.instructions])
+        skull_and_crossbones = Complex([(7, Circle(180, 180, clockwise=False, stretch=0.4, long=True)), (7 * 2 * 1.4 * RADIUS * 99 / 172, Space(270)), (2.3561, Dot(centered=True)), (7 * 2 * 1.4 * RADIUS / math.sqrt(3) / 2.5, Space(120)), (2.3561, Dot(centered=True)), (7 * 2 * 1.4 * RADIUS / math.sqrt(3) / 2.5, Space(0)), (2.3561, Dot(centered=True)), (7 * 2 * 1.4 * RADIUS / math.sqrt(3) / 2.5, Space(240)), (7 * 2 * 1.4 * RADIUS * 59 / 215, Space(270)), (1, h), (150, Space(160)), (1, h), (150, Space(340)), (150, Space(20)), (1, h), (150, Space(200)), (7 * 2 * 1.4 * RADIUS / 2, Space(270)), (7 * 2 * 1.4 * RADIUS / LINE_FACTOR / 2, Line(150), False), (2.1, Curve(60, 90, clockwise=False), True), (2.1, Curve(270, 210, clockwise=True)), (2.1, Curve(30, 60, clockwise=False), True), (7 * 2 * 1.4 * RADIUS / LINE_FACTOR, Line(330)), (2.1, Curve(60, 30, clockwise=True), True), (2.1, Curve(210, 270, clockwise=False)), (2.1, Curve(90, 60, clockwise=True), True), (7 * 2 * 1.4 * RADIUS / LINE_FACTOR / 2, Line(150), True), (7 * 2 * 1.4 * RADIUS / LINE_FACTOR / 2, Line(30), True), (2.1, Curve(120, 90, clockwise=True)), (2.1, Curve(270, 330, clockwise=False)), (2.1, Curve(150, 120, clockwise=True), True), (7 * 2 * 1.4 * RADIUS / LINE_FACTOR, Line(210)), (2.1, Curve(120, 150, clockwise=False), True), (2.1, Curve(330, 270, clockwise=True)), (2.1, Curve(90, 120, clockwise=False), True)])
+        stenographic_period = Complex([(0.5, Line(135), True), *multiplication.instructions])
         double_hyphen = Complex([(305, Space(90)), (0.5, Line(0)), (179, Space(90)), (0.5, Line(180))])
         bound = Bound()
         cross_knob_line_factor = 0.42
-        cross_knob_factor = cross_knob_line_factor * LINE_FACTOR / RADIUS
-        cross_knob_instructions = [(cross_knob_line_factor, Line(270), True), (cross_knob_factor, Circle(180, 180, clockwise=True)), (cross_knob_line_factor / 2, Line(90), True), (cross_knob_factor / 2, Circle(180, 180, clockwise=True)), (cross_knob_line_factor / 2, Line(90), True)]
-        cross_pommy = Complex([*cross_knob_instructions, (3 + 2 * cross_knob_line_factor, Line(270)), *cross_knob_instructions, (2 + cross_knob_line_factor, Line(90), True), (1 + cross_knob_line_factor, Line(180), True), *cross_knob_instructions, (2 + 2 * cross_knob_line_factor, Line(0)), *cross_knob_instructions])  # type: ignore[list-item]
+        cross_knob_op = (4.64, Dot(centered=True))
+        cross_pommy = Complex([cross_knob_op, (3 + 2 * cross_knob_line_factor, Line(270)), cross_knob_op, (2 + cross_knob_line_factor, Line(90), True), (1 + cross_knob_line_factor, Line(180), True), cross_knob_op, (2 + 2 * cross_knob_line_factor, Line(0)), cross_knob_op])
         cross = Complex([(3, Line(270)), (2, Line(90), True), (1, Line(180), True), (2, Line(0))])
         sacred_heart = Complex([(3.528, Curve(42, 25, clockwise=True, stretch=0.346, long=True)), (3.528, Curve(25, 232, clockwise=True, stretch=0.036, long=True)), (0.904, Line(232)), (0.904, Line(128)), (3.528, Curve(128, 335, clockwise=True, stretch=0.036, long=True)), (3.528, Curve(335, 318, clockwise=True, stretch=0.346, long=True)), (7.5, Space(0)), (1, cross.instructions[0][1].reversed(), True), *[(op[0] / 3, op[1]) for op in cross.instructions]])  # type: ignore[index, union-attr]
         x = XShape([(2, Curve(30, 130, clockwise=False)), (2, Curve(130, 30, clockwise=True))])
@@ -291,7 +292,7 @@ class Builder:
         high_tight_acute = SeparateAffix([(0.5, Line(45))], tight=True)
         high_grave = SeparateAffix([(0.5, Line(315))])
         high_long_grave = SeparateAffix([(0.4, Line(300)), (0.75, Line(0))])
-        high_dot = SeparateAffix([(1, Dot(centered=True))])
+        high_dot = SeparateAffix([(2, h)])
         high_circle = SeparateAffix([(2, Circle(0, 0, clockwise=False))])
         high_line = SeparateAffix([(0.5, Line(0))])
         high_wave = SeparateAffix([(2, Curve(90, 315, clockwise=True)), (RADIUS * math.sqrt(2) / LINE_FACTOR, Line(315)), (2, Curve(315, 90, clockwise=False))])
@@ -308,16 +309,17 @@ class Builder:
         low_arrow = SeparateAffix([(0.4, Line(0)), (0.4, Line(240))], low=True)
         likalisti = Complex([(5, Circle(0, 0, clockwise=False)), (375, Space(90)), (0.5, p), (math.hypot(125, 125), Space(135)), (0.5, Line(0))])
         dotted_square = [(152, Space(270)), (0.26 - light_line / 1000, Line(90)), (58 + light_line, Space(90)), (0.264 - light_line / LINE_FACTOR, Line(90)), (58 + light_line, Space(90)), (0.264 - light_line / LINE_FACTOR, Line(90)), (58 + light_line, Space(90)), (0.264 - light_line / LINE_FACTOR, Line(90)), (58 + light_line, Space(90)), (0.26 - light_line / 1000, Line(90)), (0.26 - light_line / 1000, Line(0)), (58 + light_line, Space(0)), (0.264 - light_line / LINE_FACTOR, Line(0)), (58 + light_line, Space(0)), (0.264 - light_line / LINE_FACTOR, Line(0)), (58 + light_line, Space(0)), (0.264 - light_line / LINE_FACTOR, Line(0)), (58 + light_line, Space(0)), (0.26 - light_line / 1000, Line(0)), (0.26 - light_line / 1000, Line(270)), (58 + light_line, Space(270)), (0.264 - light_line / LINE_FACTOR, Line(270)), (58 + light_line, Space(270)), (0.264 - light_line / LINE_FACTOR, Line(270)), (58 + light_line, Space(270)), (0.264 - light_line / LINE_FACTOR, Line(270)), (58 + light_line, Space(270)), (0.26 - light_line / 1000, Line(270)), (0.26 - light_line / 1000, Line(180)), (58 + light_line, Space(180)), (0.264 - light_line / LINE_FACTOR, Line(180)), (58 + light_line, Space(180)), (0.264 - light_line / LINE_FACTOR, Line(180)), (58 + light_line, Space(180)), (0.264 - light_line / LINE_FACTOR, Line(180)), (58 + light_line, Space(180)), (0.26 - light_line / 1000, Line(180))]
-        dtls = InvalidDTLS(instructions=dotted_square + [(341, Space(0)), (173, Space(90)), (0.238, Line(180)), (0.412, Line(90)), (130, Space(90)), (0.412, Line(90)), (0.18, Line(0)), (2.06, Curve(0, 180, clockwise=True, stretch=-27 / 115, long=True, relative_stretch=False)), (0.18, Line(180)), (369, Space(0)), (0.412, Line(90)), (0.148, Line(180), True), (0.296, Line(0)), (341, Space(270)), (14.5, Space(180)), (.345 * 2.58, Curve(164, 196, clockwise=False, stretch=2.058, long=True, relative_stretch=False)), (.345 * 2.88, Curve(196, 341, clockwise=False, stretch=0.25, long=True, relative_stretch=False)), (.345 *0.224, Line(341)), (.345 * 2.88, Curve(341, 196, clockwise=True, stretch=0.25, long=True, relative_stretch=False)), (.345 * 2.58, Curve(196, 164, clockwise=True, stretch=2.058, long=True, relative_stretch=False))])  # type: ignore[list-item]
+        dtls = InvalidDTLS(instructions=dotted_square + [(341, Space(0)), (173, Space(90)), (0.238, Line(180)), (0.412, Line(90)), (130, Space(90)), (0.412, Line(90)), (0.18, Line(0)), (2.06, Curve(0, 180, clockwise=True, stretch=-27 / 115, long=True, relative_stretch=False)), (0.18, Line(180)), (369, Space(0)), (0.412, Line(90)), (0.148, Line(180), True), (0.296, Line(0)), (341, Space(270)), (14.5, Space(180)), (.345 * 2.58, Curve(164, 196, clockwise=False, stretch=2.058, long=True, relative_stretch=False)), (.345 * 2.88, Curve(196, 341, clockwise=False, stretch=0.25, long=True, relative_stretch=False)), (.345 *0.224, Line(341)), (.345 * 2.88, Curve(341, 196, clockwise=True, stretch=0.25, long=True, relative_stretch=False)), (.345 * 2.58, Curve(196, 164, clockwise=True, stretch=2.058, long=True, relative_stretch=False))])
         chinook_period = Complex([(100, Space(90)), (1, Line(0)), (179, Space(90)), (1, Line(180))])
-        overlap = InvalidOverlap(continuing=False, instructions=dotted_square + [(162.5, Space(0)), (397, Space(90)), (0.192, Line(90)), (0.096, Line(270), True), (1.134, Line(0)), (0.32, Line(140)), (0.32, Line(320), True), (0.32, Line(220)), (170, Space(180)), (0.4116, Line(90))])  # type: ignore[list-item]
-        continuing_overlap = InvalidOverlap(continuing=True, instructions=dotted_square + [(189, Space(0)), (522, Space(90)), (0.192, Line(90)), (0.096, Line(270), True), (0.726, Line(0)), (124, Space(180)), (145, Space(90)), (0.852, Line(270)), (0.552, Line(0)), (0.32, Line(140)), (0.32, Line(320), True), (0.32, Line(220))])  # type: ignore[list-item]
-        down_step = InvalidStep(270, dotted_square + [(444, Space(0)), (749, Space(90)), (1.184, Line(270)), (0.32, Line(130)), (0.32, Line(310), True), (0.32, Line(50))])  # type: ignore[list-item]
-        up_step = InvalidStep(90, dotted_square + [(444, Space(0)), (157, Space(90)), (1.184, Line(90)), (0.32, Line(230)), (0.32, Line(50), True), (0.32, Line(310))])  # type: ignore[list-item]
+        overlap = InvalidOverlap(continuing=False, instructions=dotted_square + [(162.5, Space(0)), (397, Space(90)), (0.192, Line(90)), (0.096, Line(270), True), (1.134, Line(0)), (0.32, Line(140)), (0.32, Line(320), True), (0.32, Line(220)), (170, Space(180)), (0.4116, Line(90))])
+        continuing_overlap = InvalidOverlap(continuing=True, instructions=dotted_square + [(189, Space(0)), (522, Space(90)), (0.192, Line(90)), (0.096, Line(270), True), (0.726, Line(0)), (124, Space(180)), (145, Space(90)), (0.852, Line(270)), (0.552, Line(0)), (0.32, Line(140)), (0.32, Line(320), True), (0.32, Line(220))])
+        down_step = InvalidStep(270, dotted_square + [(444, Space(0)), (749, Space(90)), (1.184, Line(270)), (0.32, Line(130)), (0.32, Line(310), True), (0.32, Line(50))])
+        up_step = InvalidStep(90, dotted_square + [(444, Space(0)), (157, Space(90)), (1.184, Line(90)), (0.32, Line(230)), (0.32, Line(50), True), (0.32, Line(310))])
         line = Line(0)
 
-        dot_1 = Schema(None, h, 1, anchor=anchors.RELATIVE_1)
-        dot_2 = Schema(None, h, 1, anchor=anchors.RELATIVE_2)
+        small_dot_1 = Schema(None, h, 1, anchor=anchors.RELATIVE_1)
+        dot_1 = Schema(None, h, 2, anchor=anchors.RELATIVE_1)
+        dot_2 = Schema(None, h, 2, anchor=anchors.RELATIVE_2)
         line_2 = Schema(None, line, 0.35, Type.ORIENTING, anchor=anchors.RELATIVE_2)
         line_middle = Schema(None, line, 0.45, Type.ORIENTING, anchor=anchors.MIDDLE)
 
@@ -329,8 +331,8 @@ class Builder:
             Schema(0x002A, asterisk, 1, Type.NON_JOINING),
             Schema(0x002B, plus, 1, Type.NON_JOINING),
             Schema(0x002C, comma, 1, Type.NON_JOINING, encirclable=True),
-            Schema(0x002E, h, 1, Type.NON_JOINING, shading_allowed=False),
-            Schema(0x002F, slash, 1, Type.NON_JOINING, y_min=BRACKET_DEPTH, y_max=BRACKET_HEIGHT, shading_allowed=False),
+            Schema(0x002E, h, 2, Type.NON_JOINING, shading_allowed=False),
+            Schema(0x002F, slash, 1, Type.NON_JOINING, y_min=BRACKET_DEPTH, y_max=BRACKET_HEIGHT, maximum_tree_width=0, shading_allowed=False),
             Schema(0x0030, zero, 3.882, Type.NON_JOINING, y_max=CAP_HEIGHT, shading_allowed=False),
             Schema(0x0031, one, 1, Type.NON_JOINING, y_max=CAP_HEIGHT, shading_allowed=False),
             Schema(0x0032, two, 1, Type.NON_JOINING, y_max=CAP_HEIGHT, shading_allowed=False),
@@ -341,7 +343,7 @@ class Builder:
             Schema(0x0037, seven, 1, Type.NON_JOINING, y_max=CAP_HEIGHT, shading_allowed=False),
             Schema(0x0038, eight, 1.064, Type.NON_JOINING, y_max=CAP_HEIGHT, shading_allowed=False),
             Schema(0x0039, nine, 1.021, Type.NON_JOINING, y_max=CAP_HEIGHT, shading_allowed=False),
-            Schema(0x003A, colon, 0.856, Type.NON_JOINING, encirclable=True, shading_allowed=False),
+            Schema(0x003A, colon, 1, Type.NON_JOINING, encirclable=True, shading_allowed=False),
             Schema(0x003B, semicolon, 1, Type.NON_JOINING, encirclable=True),
             Schema(0x003C, less_than, 2, Type.NON_JOINING, shading_allowed=False),
             Schema(0x003D, equal, 1),
@@ -360,13 +362,13 @@ class Builder:
             Schema(0x0302, circumflex, 0.2, Type.NON_JOINING, anchor=anchors.ABOVE),
             Schema(0x0304, macron, 0.2, anchor=anchors.ABOVE),
             Schema(0x0306, breve, 1, anchor=anchors.ABOVE),
-            Schema(0x0307, h, 1, anchor=anchors.ABOVE),
-            Schema(0x0308, diaeresis, 0.2, anchor=anchors.ABOVE),
+            Schema(0x0307, h, 2, anchor=anchors.ABOVE),
+            Schema(0x0308, diaeresis, 1, anchor=anchors.ABOVE),
             Schema(0x030C, caron, 0.2, Type.NON_JOINING, anchor=anchors.ABOVE),
             Schema(0x0316, grave, 0.2, anchor=anchors.BELOW),
             Schema(0x0317, acute, 0.2, anchor=anchors.BELOW),
-            Schema(0x0323, h, 1, anchor=anchors.BELOW),
-            Schema(0x0324, diaeresis, 0.2, anchor=anchors.BELOW),
+            Schema(0x0323, h, 2, anchor=anchors.BELOW),
+            Schema(0x0324, diaeresis, 1, anchor=anchors.BELOW),
             Schema(0x032F, inverted_breve, 1, anchor=anchors.BELOW),
             Schema(0x0331, macron, 0.2, anchor=anchors.BELOW),
             Schema(0x034F, space, 0, Type.NON_JOINING, side_bearing=0, ignorability=Ignorability.DEFAULT_YES),
@@ -374,15 +376,19 @@ class Builder:
             Schema(0x2003, space, 1500, Type.NON_JOINING, side_bearing=1500),
             Schema(0x200C, space, 0, Type.NON_JOINING, side_bearing=0, ignorability=Ignorability.OVERRIDDEN_NO),
             Schema(0x2013, en_dash, 1, Type.NON_JOINING, encirclable=True),
-            Schema(0x201C, high_left_quote, 1, Type.NON_JOINING),
-            Schema(0x201D, high_right_quote, 1, Type.NON_JOINING),
-            Schema(0x201E, low_right_quote, 1, Type.NON_JOINING),
-            Schema(0x2026, ellipsis, 1, Type.NON_JOINING, shading_allowed=False),
+            Schema(0x201C, high_left_quote, 1, Type.NON_JOINING, encirclable=True),
+            Schema(0x201D, high_right_quote, 1, Type.NON_JOINING, encirclable=True),
+            Schema(0x201E, low_right_quote, 1, Type.NON_JOINING, encirclable=True),
+            Schema(0x2026, ellipsis, 1, Type.NON_JOINING, encirclable=True),
             Schema(0x202F, nnbsp, 200 - 2 * DEFAULT_SIDE_BEARING, side_bearing=200 - 2 * DEFAULT_SIDE_BEARING),
             Schema(0x2039, left_single_guillemet, 1, Type.NON_JOINING),
             Schema(0x203A, right_single_guillemet, 1, Type.NON_JOINING),
             Schema(0x2044, slash, 1, Type.NON_JOINING, y_min=BRACKET_DEPTH, y_max=BRACKET_HEIGHT, shading_allowed=False),
             Schema(0x20DD, enclosing_circle, 10, anchor=anchors.MIDDLE),
+            Schema(0x2308, left_ceiling, 1, Type.NON_JOINING, y_min=BRACKET_DEPTH, y_max=BRACKET_HEIGHT, shading_allowed=False),
+            Schema(0x2309, right_ceiling, 1, Type.NON_JOINING, y_min=BRACKET_DEPTH, y_max=BRACKET_HEIGHT, shading_allowed=False),
+            Schema(0x230A, left_floor, 1, Type.NON_JOINING, y_min=BRACKET_DEPTH, y_max=BRACKET_HEIGHT, shading_allowed=False),
+            Schema(0x230B, right_floor, 1, Type.NON_JOINING, y_min=BRACKET_DEPTH, y_max=BRACKET_HEIGHT, shading_allowed=False),
             Schema(0x25CC, dotted_circle, 1, Type.NON_JOINING),
             Schema(0x2620, skull_and_crossbones, 1, Type.NON_JOINING, y_max=1.5 * CAP_HEIGHT, y_min=-0.5 * CAP_HEIGHT),
             Schema(0x271D, cross, 1, Type.NON_JOINING, y_max=1.1 * CAP_HEIGHT, y_min=-0.4 * CAP_HEIGHT, shading_allowed=False),
@@ -400,7 +406,7 @@ class Builder:
             Schema(0xEC1A, n_reverse, 6, shading_allowed=False),
             Schema(0xEC1B, j_reverse, 6, shading_allowed=False),
             Schema(0xEC1C, s_reverse, 6, shading_allowed=False),
-            Schema(0x1BC00, h, 1, shading_allowed=False),
+            Schema(0x1BC00, h, 2, shading_allowed=False),
             Schema(0x1BC01, x, 0.75, shading_allowed=False),
             Schema(0x1BC02, p, 1, Type.ORIENTING),
             Schema(0x1BC03, t, 1, Type.ORIENTING),
@@ -486,17 +492,17 @@ class Builder:
             Schema(0x1BC53, s_t, 6, Type.ORIENTING, marks=[dot_1], shading_allowed=False),
             Schema(0x1BC54, u_n, 3, shading_allowed=False),
             Schema(0x1BC55, long_u, 2, shading_allowed=False),
-            Schema(0x1BC56, romanian_u, 3, Type.ORIENTING, marks=[dot_1], shading_allowed=False),
+            Schema(0x1BC56, romanian_u, 3, Type.ORIENTING, marks=[small_dot_1], shading_allowed=False),
             Schema(0x1BC57, uh, 2, Type.ORIENTING, shading_allowed=False),
-            Schema(0x1BC58, uh, 2, Type.ORIENTING, marks=[dot_1], shading_allowed=False),
+            Schema(0x1BC58, uh, 2, Type.ORIENTING, marks=[small_dot_1], shading_allowed=False),
             Schema(0x1BC59, uh, 2, Type.ORIENTING, marks=[dot_2], shading_allowed=False),
-            Schema(0x1BC5A, o, 3, Type.ORIENTING, marks=[dot_1], shading_allowed=False),
+            Schema(0x1BC5A, o, 3, Type.ORIENTING, marks=[small_dot_1], shading_allowed=False),
             Schema(0x1BC5B, ou, 3, Type.ORIENTING, can_lead_orienting_sequence=True, shading_allowed=False),
             Schema(0x1BC5C, wa, 1, Type.ORIENTING, shading_allowed=False),
             Schema(0x1BC5D, wo, 1, Type.ORIENTING, shading_allowed=False),
             Schema(0x1BC5E, wi, 1, Type.ORIENTING, shading_allowed=False),
             Schema(0x1BC5F, wei, 1, Type.ORIENTING, shading_allowed=False),
-            Schema(0x1BC60, wo, 1, Type.ORIENTING, marks=[dot_1], shading_allowed=False),
+            Schema(0x1BC60, wo, 1, Type.ORIENTING, marks=[small_dot_1], shading_allowed=False),
             Schema(0x1BC61, s_t, 3.2, can_lead_orienting_sequence=True),
             Schema(0x1BC62, s_n, 3.2, Type.ORIENTING),
             Schema(0x1BC63, t_s, 3.2, can_lead_orienting_sequence=True),
@@ -696,17 +702,15 @@ class Builder:
             schema.diphthong_1,
             schema.diphthong_2,
         )
-        if schema.joining_type == Type.NON_JOINING:
-            glyph.left_side_bearing = int(scalar * schema.side_bearing)
-        else:
+        if schema.joining_type != Type.NON_JOINING:
             entry_x = next(
                 (x for anchor_class_name, type, x, _ in glyph.anchorPoints
                     if anchor_class_name == anchors.CURSIVE and type == 'entry'),
                 0,
             )
             glyph.transform(fontTools.misc.transform.Offset(-entry_x, 0))
+        x_min, y_min, x_max, y_max = glyph.boundingBox()
         if not floating:
-            _, y_min, _, y_max = glyph.boundingBox()
             if y_min != y_max:
                 if schema.y_min is not None:
                     if schema.y_max is not None:
@@ -727,15 +731,20 @@ class Builder:
         if schema.glyph_class == GlyphClass.MARK:
             glyph.width = 0
         else:
-            glyph.right_side_bearing = int(scalar * schema.side_bearing)
+            side_bearing = int(scalar * schema.side_bearing)
+            glyph.right_side_bearing = side_bearing
+            if x_min != x_max:
+                glyph.left_side_bearing = side_bearing
 
     def _create_glyph(self, schema: Schema, *, drawing: bool) -> fontforge.glyph:
         glyph_name = str(schema)
         uni = -1 if schema.cmap is None else schema.cmap
         if glyph_name in self.font:
             return self._add_altuni(uni, glyph_name)
+        assert uni not in self.font, f'Duplicate code point: {hex(uni)}'
         glyph = self.font.createChar(uni, glyph_name)
-        glyph.glyphclass = schema.glyph_class
+        glyph.unicode = uni
+        glyph.glyphclass = schema.glyph_class.value
         glyph.temporary = schema
         if drawing:
             self._draw_glyph(glyph, schema)
@@ -758,18 +767,19 @@ class Builder:
                 x = round(x)
                 y = round(y)
                 glyph_name = glyph.glyphname
-                if type == 'mark':
-                    mark_positions[anchor_class_name][(x, y)].append(glyph_name)
-                elif type == 'base':
-                    base_positions[anchor_class_name][(x, y)].append(glyph_name)
-                elif type == 'basemark':
-                    basemark_positions[anchor_class_name][(x, y)].append(glyph_name)
-                elif type == 'entry':
-                    cursive_positions[anchor_class_name][glyph_name][0] = fontTools.feaLib.ast.Anchor(x, y)
-                elif type == 'exit':
-                    cursive_positions[anchor_class_name][glyph_name][1] = fontTools.feaLib.ast.Anchor(x, y)
-                else:
-                    raise RuntimeError('Unknown anchor type: {}'.format(type))
+                match type:
+                    case 'mark':
+                        mark_positions[anchor_class_name][(x, y)].append(glyph_name)
+                    case 'base':
+                        base_positions[anchor_class_name][(x, y)].append(glyph_name)
+                    case 'basemark':
+                        basemark_positions[anchor_class_name][(x, y)].append(glyph_name)
+                    case 'entry':
+                        cursive_positions[anchor_class_name][glyph_name][0] = fontTools.feaLib.ast.Anchor(x, y)
+                    case 'exit':
+                        cursive_positions[anchor_class_name][glyph_name][1] = fontTools.feaLib.ast.Anchor(x, y)
+                    case _:
+                        raise RuntimeError('Unknown anchor type: {}'.format(type))
         for anchor_class_name, lookup in self._anchors.items():
             mark_class = fontTools.feaLib.ast.MarkClass(anchor_class_name)
             for x_y, glyph_class in mark_positions[anchor_class_name].items():
@@ -797,13 +807,13 @@ class Builder:
         marks = []
         ligatures = []
         for glyph in self.font.glyphs():
-            glyph_class = glyph.glyphclass
-            if glyph_class == GlyphClass.BLOCKER:
-                bases.append(glyph.glyphname)
-            elif glyph_class == GlyphClass.MARK:
-                marks.append(glyph.glyphname)
-            elif glyph_class == GlyphClass.JOINER:
-                ligatures.append(glyph.glyphname)
+            match glyph.glyphclass:
+                case GlyphClass.BLOCKER.value:
+                    bases.append(glyph.glyphname)
+                case GlyphClass.MARK.value:
+                    marks.append(glyph.glyphname)
+                case GlyphClass.JOINER.value:
+                    ligatures.append(glyph.glyphname)
         gdef = fontTools.feaLib.ast.TableBlock('GDEF')
         gdef.statements.append(fontTools.feaLib.ast.GlyphClassDefStatement(
             fontTools.feaLib.ast.GlyphClass(bases),
@@ -871,7 +881,7 @@ class Builder:
         named_lookups_with_phases: MutableMapping[str, Tuple[Lookup, Any]],
     ) -> None:
         grouper = sifting.group_schemas(schemas)
-        previous_phase = None
+        previous_phase: Optional[Callable] = None
         for lookup, phase in reversed(lookups_with_phases):
             if phase is not previous_phase is not None:
                 rename_schemas(grouper, self._phases.index(previous_phase))
@@ -902,11 +912,17 @@ class Builder:
         lookups_with_phases += more_lookups_with_phases
         class_asts |= self.convert_classes(more_classes)
         named_lookup_asts |= self.convert_named_lookups(more_named_lookups_with_phases, class_asts)
-        for schema in schemas.sorted(key=lambda schema: not (schema in output_schemas and schema in more_output_schemas)):
-            self._create_glyph(
-                schema,
-                drawing=schema in output_schemas and schema in more_output_schemas and not schema.ignored_for_topography,
-            )
+        for schema in schemas.sorted(key=lambda schema: (
+            schema.canonical_schema is not schema,
+            schema.cmap is None and schema.glyph_class == GlyphClass.MARK
+                or str(schema).startswith('_')
+                or not (not schema.ignored_for_topography and schema in output_schemas and schema in more_output_schemas),
+        )):
+            if schema.canonical_schema is schema or schema.cmap is not None:
+                self._create_glyph(
+                    schema,
+                    drawing=not schema.ignored_for_topography and schema in output_schemas and schema in more_output_schemas,
+                )
         (
             schemas,
             _,
@@ -915,7 +931,7 @@ class Builder:
             more_named_lookups_with_phases,
         ) = phases.run_phases(self, [*map(self._glyph_to_schema, self.font.glyphs())], self._marker_phases, classes)
         lookups_with_phases += more_lookups_with_phases
-        for schema in schemas:
+        for schema in schemas.sorted(key=Schema.glyph_id_sort_key):
             if schema.glyph is None:
                 self._create_marker(schema)
         class_asts |= self.convert_classes(more_classes)
@@ -926,7 +942,11 @@ class Builder:
         self._add_lookups(class_asts)
         self.font.selection.all()
         self.font.round()
-        self.font.simplify(3, ('smoothcurves',))
+        self.font.canonicalStart()
+        self.font.simplify(3, (
+            'setstarttoextremum',
+            'smoothcurves',
+        ))
 
     def merge_features(
         self,

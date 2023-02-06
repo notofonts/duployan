@@ -1,4 +1,4 @@
-# Copyright 2018-2019 David Corbett
+# Copyright 2018-2019, 2022 David Corbett
 # Copyright 2020-2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -55,14 +55,22 @@ import fontTools.agl
 import fontforge
 
 
+from shapes import AnchorWidthDigit
 from shapes import ChildEdge
 from shapes import Circle
 from shapes import CircleRole
 from shapes import Curve
+from shapes import DigitStatus
+from shapes import EntryWidthDigit
+from shapes import GlyphClassSelector
+from shapes import Hub
 from shapes import InvalidStep
+from shapes import LeftBoundDigit
 from shapes import Line
+from shapes import MarkAnchorSelector
 from shapes import Notdef
 from shapes import Ou
+from shapes import RightBoundDigit
 from shapes import Shape
 from shapes import Space
 from utils import CAP_HEIGHT
@@ -70,6 +78,7 @@ from utils import CLONE_DEFAULT
 from utils import Context
 from utils import DEFAULT_SIDE_BEARING
 from utils import GlyphClass
+from utils import MAX_TREE_WIDTH
 from utils import NO_CONTEXT
 from utils import Type
 
@@ -175,6 +184,9 @@ class Schema:
         ignorability: The ignorability of this schema’s character.
         encirclable: Whether this schema’s character is attested with a
             following U+20DD COMBINING ENCLOSING CIRCLE.
+        maximum_tree_width: The maximum width of a shorthand overlap
+            sequence following this schema. The true maximum width may
+            be lower, depending on this schema’s shape and size.
         shading_allowed: Whether this schema may be followed by U+1BC9D
             DUPLOYAN THICK LETTER SELECTOR. Some characters for which
             shading is attested nevertheless have this attribute set to
@@ -324,6 +336,7 @@ class Schema:
             marks: Optional[Sequence[Schema]] = None,
             ignorability: Ignorability = Ignorability.DEFAULT_NO,
             encirclable: bool = False,
+            maximum_tree_width: int = MAX_TREE_WIDTH,
             shading_allowed: bool = True,
             context_in: Optional[Context] = None,
             context_out: Optional[Context] = None,
@@ -355,6 +368,7 @@ class Schema:
                 attribute to an empty sequence.
             ignorability: The ``ignorability`` attribute.
             encirclable: The ``encirclable`` attribute.
+            maximum_tree_width: The ``maximum_tree_width`` attribute.
             shading_allowed: The ``shading_allowed`` attribute.
             context_in: The ``context_in`` attribute, or ``None`` to set
                 the attribute to `NO_CONTEXT`.
@@ -386,6 +400,7 @@ class Schema:
         self.marks = marks or []
         self.ignorability = ignorability
         self.encirclable = encirclable
+        self.maximum_tree_width = maximum_tree_width
         self.shading_allowed = shading_allowed
         self.context_in = context_in or NO_CONTEXT
         self.context_out = context_out or NO_CONTEXT
@@ -400,7 +415,7 @@ class Schema:
         self._lookalike_group: Collection[Schema] = [self]
         self.glyph: Optional[fontforge.glyph] = None
 
-    def sort_key(self):
+    def sort_key(self) -> Any:
         """Returns a sortable key representing this schema.
 
         This is used to decide which schema among many mergeable schemas
@@ -422,6 +437,38 @@ class Schema:
             len(self._calculate_name()),
         )
 
+    def glyph_id_sort_key(self) -> Any:
+        """Returns a sortable key representing the glyph ID of this
+        schema’s glyph.
+
+        This is used to determine the best ordering of glyph IDs for the
+        schemas created by marker phases. The sort key is designed to
+        produce runs of schemas whose glyphs should be adjacent, which
+        helps optimize range-based coverage tables to single ranges.
+        """
+        shape = type(self.path)
+        digit_shapes = [AnchorWidthDigit, EntryWidthDigit, LeftBoundDigit, RightBoundDigit]
+        if shape in digit_shapes:
+            status = (DigitStatus.NORMAL if isinstance(self.path, EntryWidthDigit) else self.path.status).value  # type: ignore[attr-defined]
+            place = self.path.place  # type: ignore[attr-defined]
+            digit_shape_index = digit_shapes.index(shape)
+            digit = self.path.digit  # type: ignore[attr-defined]
+            other_shape_index = -1
+        else:
+            status = -1
+            place = -1
+            digit_shape_index = -1
+            digit = -1
+            other_shapes = [Hub, MarkAnchorSelector, GlyphClassSelector]
+            other_shape_index = other_shapes.index(shape) if shape in other_shapes else -1
+        return (
+            status,
+            place,
+            digit_shape_index,
+            digit,
+            other_shape_index,
+        )
+
     def clone(
         self,
         *,
@@ -440,6 +487,7 @@ class Schema:
         marks=CLONE_DEFAULT,
         ignorability=CLONE_DEFAULT,
         encirclable=CLONE_DEFAULT,
+        maximum_tree_width=CLONE_DEFAULT,
         shading_allowed=CLONE_DEFAULT,
         context_in=CLONE_DEFAULT,
         context_out=CLONE_DEFAULT,
@@ -465,6 +513,7 @@ class Schema:
             marks=self.marks if marks is CLONE_DEFAULT else marks,
             ignorability=self.ignorability if ignorability is CLONE_DEFAULT else ignorability,
             encirclable=self.encirclable if encirclable is CLONE_DEFAULT else encirclable,
+            maximum_tree_width=self.maximum_tree_width if maximum_tree_width is CLONE_DEFAULT else maximum_tree_width,
             shading_allowed=self.shading_allowed if shading_allowed is CLONE_DEFAULT else shading_allowed,
             context_in=self.context_in if context_in is CLONE_DEFAULT else context_in,
             context_out=self.context_out if context_out is CLONE_DEFAULT else context_out,
@@ -506,15 +555,17 @@ class Schema:
         return self.clone(cmap=None, marks=None) if self.marks else self
 
     @functools.cached_property
-    def glyph_class(self) -> str:
+    def glyph_class(self) -> GlyphClass:
         """Returns the glyph class of the glyph this schema represents.
         """
-        return self.path.guaranteed_glyph_class() or (
-            GlyphClass.MARK
-                if self.anchor or self.child or self.ignored_for_topography
-                else GlyphClass.BLOCKER
-                if self.joining_type == Type.NON_JOINING
-                else GlyphClass.JOINER
+        guaranteed_glyph_class = self.path.guaranteed_glyph_class()
+        return (guaranteed_glyph_class
+            if guaranteed_glyph_class is not None
+            else GlyphClass.MARK
+            if self.anchor or self.child or self.ignored_for_topography
+            else GlyphClass.BLOCKER
+            if self.joining_type == Type.NON_JOINING
+            else GlyphClass.JOINER
         )
 
     @functools.cached_property
@@ -539,7 +590,7 @@ class Schema:
         A group is like a hash, but instead of being an uninterpretable
         number, it may be any hashable value. Two schemas with equal
         groups represent glyphs that are interchangeable for all
-        purposes except perhaps for OpenType Layout.
+        purposes except perhaps for GSUB.
         """
         if self.ignored_for_topography:
             return (
@@ -721,8 +772,6 @@ class Schema:
                     name += '.subs'
                 else:
                     name += '.dnom'
-        if isinstance(self.path, Curve) and self.path.early_exit:
-            name += '.ee'
         if not cps and isinstance(self.path, Space):
             name += f'''.{
                     int(self.size * math.cos(math.radians(self.path.angle)))
@@ -742,14 +791,9 @@ class Schema:
         if isinstance(self.path, Curve) and self.path.overlap_angle is not None:
             name += f'.{int(self.path.overlap_angle)}'
         if self.widthless:
-            name += '.psts'
+            name += '.wl'
         if self.ignored_for_topography:
-            name += '.dependent'
-        if (isinstance(self.path, Circle)
-            and self.path.role != CircleRole.INDEPENDENT
-            and self.path.angle_in != self.path.angle_out
-        ):
-            name += '.circle'
+            name += '.skip'
         if first_component_implies_type or self.cmap is None and self.path.invisible():
             if name and first_component_implies_type:
                 name = f'.{name}'
@@ -801,6 +845,12 @@ class Schema:
                     self._canonical_names[name] = [self]
                 self._glyph_name = name
         return self._glyph_name
+
+    def max_tree_width(self) -> int:
+        """Returns the maximum width of a shorthand overlap sequence
+        following this schema.
+        """
+        return min(self.maximum_tree_width, self.path.max_tree_width(self.size))
 
     def max_double_marks(self) -> int:
         """Returns the maximum number of consecutive instances of
@@ -951,7 +1001,7 @@ class Schema:
     def hub_priority(self) -> int:
         """Returns this schema’s hub priority.
 
-        See ``shapes.Hub``.
+        See `Hub`.
         """
         if self.glyph_class != GlyphClass.JOINER:
             return -1

@@ -1,11 +1,15 @@
 ## Fontbakery report
 
-Fontbakery version: 0.8.11a8
+Fontbakery version: 0.8.11b0
 
-<details><summary><b>[12] NotoSansDuployan-Bold.ttf</b></summary><div><details><summary>🔥 <b>FAIL:</b> Noto fonts must have an ARTICLE.en_us.html file (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/description/noto_has_article">com.google.fonts/check/description/noto_has_article</a>)</summary><div>
+<details><summary><b>[13] NotoSansDuployan-Bold.ttf</b></summary><div><details><summary>🔥 <b>FAIL:</b> Noto fonts must have an ARTICLE.en_us.html file (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/description/noto_has_article">com.google.fonts/check/description/noto_has_article</a>)</summary><div>
 
 
 * 🔥 **FAIL** This is a Noto font but it lacks an ARTICLE.en_us.html file [code: missing-article]
+</div></details><details><summary>🔥 <b>FAIL:</b> Checking OS/2 usWinAscent & usWinDescent. (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/universal.html#com.google.fonts/check/family/win_ascent_and_descent">com.google.fonts/check/family/win_ascent_and_descent</a>)</summary><div>
+
+
+* 🔥 **FAIL** OS/2.usWinDescent value should be equal or greater than 833, but got 357 instead. [code: descent]
 </div></details><details><summary>🔥 <b>FAIL:</b> Ensure dotted circle glyph is present and can attach marks. (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/universal.html#com.google.fonts/check/dotted_circle">com.google.fonts/check/dotted_circle</a>)</summary><div>
 
 
@@ -23,7 +27,7 @@ Fontbakery version: 0.8.11a8
 
 	- uni0327 
 
-	- And uni0328 [code: unattached-dotted-circle-marks]
+	- uni0328 [code: unattached-dotted-circle-marks]
 </div></details><details><summary>⚠ <b>WARN:</b> Ensure files are not too large. (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/file_size">com.google.fonts/check/file_size</a>)</summary><div>
 
 
@@ -45,9 +49,9 @@ WARNING: Layout: tags aren't arranged alphabetically.
 
 * ⚠ **WARN** The following glyphs could not be reached by codepoint or substitution rules:
 
-	- glyph10352 
+	- glyph10355 
 
-	- And glyph10448
+	- glyph10451
  [code: unreachable-glyphs]
 </div></details><details><summary>⚠ <b>WARN:</b> Check if each glyph has the recommended amount of contours. (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/universal.html#com.google.fonts/check/contour_count">com.google.fonts/check/contour_count</a>)</summary><div>
 
@@ -62,8 +66,29 @@ The following glyphs do not have the recommended number of contours:
 
 	- Glyph name: aogonek	Contours detected: 3	Expected: 2 
 
-	- And Glyph name: uogonek	Contours detected: 2	Expected: 1
+	- Glyph name: uogonek	Contours detected: 2	Expected: 1
  [code: contour-count]
+</div></details><details><summary>⚠ <b>WARN:</b> Check math signs have the same width. (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/universal.html#com.google.fonts/check/math_signs_width">com.google.fonts/check/math_signs_width</a>)</summary><div>
+
+
+* ⚠ **WARN** The most common width is 1161 among a set of 2 math glyphs.
+The following math glyphs have a different width, though:
+
+Width = 686:
+plus
+
+Width = 770:
+equal
+
+Width = 624:
+multiply
+
+Width = 572:
+divide
+
+Width = 322:
+minus
+ [code: width-outliers]
 </div></details><details><summary>⚠ <b>WARN:</b> Font has correct post table version? (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/post.html#com.google.fonts/check/post_table_version">com.google.fonts/check/post_table_version</a>)</summary><div>
 
 
@@ -73,10 +98,6 @@ The following glyphs do not have the recommended number of contours:
 
 * ⚠ **WARN** The following mark characters could be in the GDEF mark glyph class:
 	 u1BC9D (U+1BC9D) [code: mark-chars]
-</div></details><details><summary>⚠ <b>WARN:</b> Does GPOS table have kerning information? This check skips monospaced fonts as defined by post.isFixedPitch value (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/gpos.html#com.google.fonts/check/gpos_kerning_info">com.google.fonts/check/gpos_kerning_info</a>)</summary><div>
-
-
-* ⚠ **WARN** GPOS table lacks kerning information. [code: lacks-kern-info]
 </div></details><details><summary>⚠ <b>WARN:</b> Are there any misaligned on-curve points? (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/<Section: Outline Correctness Checks>.html#com.google.fonts/check/outline_alignment_miss">com.google.fonts/check/outline_alignment_miss</a>)</summary><div>
 
 
@@ -90,19 +111,19 @@ The following glyphs do not have the recommended number of contours:
 
 	* numbersign (U+0023): X=545.0,Y=713.0 (should be at cap-height 714?)
 
-	* two (U+0032): X=270.0,Y=714.5 (should be at cap-height 714?)
+	* two (U+0032): X=270.5,Y=714.5 (should be at cap-height 714?)
 
-	* three (U+0033): X=215.0,Y=1.5 (should be at baseline 0?)
+	* three (U+0033): X=211.0,Y=1.5 (should be at baseline 0?)
 
-	* six (U+0036): X=410.0,Y=713.0 (should be at cap-height 714?)
+	* six (U+0036): X=411.0,Y=713.0 (should be at cap-height 714?)
 
-	* nine (U+0039): X=227.0,Y=1.0 (should be at baseline 0?)
+	* nine (U+0039): X=228.0,Y=1.0 (should be at baseline 0?)
 
 	* less (U+003C): X=1043.0,Y=2.0 (should be at baseline 0?)
 
-	* question (U+003F): X=216.0,Y=714.5 (should be at cap-height 714?) 
+	* question (U+003F): X=210.0,Y=714.5 (should be at cap-height 714?) 
 
-	* And 68 more.
+	* 60 more.
 
 Use -F or --full-lists to disable shortening of long lists. [code: found-misalignments]
 </div></details><details><summary>⚠ <b>WARN:</b> Do outlines contain any jaggy segments? (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/<Section: Outline Correctness Checks>.html#com.google.fonts/check/outline_jaggy_segments">com.google.fonts/check/outline_jaggy_segments</a>)</summary><div>
@@ -130,13 +151,17 @@ Use -F or --full-lists to disable shortening of long lists. [code: found-misalig
 
 	* Wdieresis (U+1E84): B<<266.0,196.0>-<272.0,161.0>-<275.0,137.0>>/B<<275.0,137.0>-<278.0,162.0>-<284.0,196.5>> = 13.967789761532726 
 
-	* And 5 more.
+	* 5 more.
 
 Use -F or --full-lists to disable shortening of long lists. [code: found-jaggy-segments]
-</div></details><br></div></details><details><summary><b>[11] NotoSansDuployan-Regular.ttf</b></summary><div><details><summary>🔥 <b>FAIL:</b> Noto fonts must have an ARTICLE.en_us.html file (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/description/noto_has_article">com.google.fonts/check/description/noto_has_article</a>)</summary><div>
+</div></details><br></div></details><details><summary><b>[12] NotoSansDuployan-Regular.ttf</b></summary><div><details><summary>🔥 <b>FAIL:</b> Noto fonts must have an ARTICLE.en_us.html file (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/description/noto_has_article">com.google.fonts/check/description/noto_has_article</a>)</summary><div>
 
 
 * 🔥 **FAIL** This is a Noto font but it lacks an ARTICLE.en_us.html file [code: missing-article]
+</div></details><details><summary>🔥 <b>FAIL:</b> Checking OS/2 usWinAscent & usWinDescent. (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/universal.html#com.google.fonts/check/family/win_ascent_and_descent">com.google.fonts/check/family/win_ascent_and_descent</a>)</summary><div>
+
+
+* 🔥 **FAIL** OS/2.usWinDescent value should be equal or greater than 833, but got 357 instead. [code: descent]
 </div></details><details><summary>🔥 <b>FAIL:</b> Ensure dotted circle glyph is present and can attach marks. (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/universal.html#com.google.fonts/check/dotted_circle">com.google.fonts/check/dotted_circle</a>)</summary><div>
 
 
@@ -154,7 +179,7 @@ Use -F or --full-lists to disable shortening of long lists. [code: found-jaggy-s
 
 	- uni0327 
 
-	- And uni0328 [code: unattached-dotted-circle-marks]
+	- uni0328 [code: unattached-dotted-circle-marks]
 </div></details><details><summary>⚠ <b>WARN:</b> Ensure files are not too large. (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/file_size">com.google.fonts/check/file_size</a>)</summary><div>
 
 
@@ -172,7 +197,7 @@ Use -F or --full-lists to disable shortening of long lists. [code: found-jaggy-s
 	* u1BC08
 	* u1BC09
 	* u1BC0B
-	* u1BC0C and 103 more.
+	* u1BC0C and 101 more.
 
 Use -F or --full-lists to disable shortening of long lists.
 </div></details><details><summary>⚠ <b>WARN:</b> Ensure fonts have ScriptLangTags declared on the 'meta' table. (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/googlefonts.html#com.google.fonts/check/meta/script_lang_tags">com.google.fonts/check/meta/script_lang_tags</a>)</summary><div>
@@ -192,9 +217,9 @@ WARNING: Layout: tags aren't arranged alphabetically.
 
 * ⚠ **WARN** The following glyphs could not be reached by codepoint or substitution rules:
 
-	- glyph10255 
+	- glyph10240 
 
-	- And glyph10351
+	- glyph10336
  [code: unreachable-glyphs]
 </div></details><details><summary>⚠ <b>WARN:</b> Check if each glyph has the recommended amount of contours. (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/universal.html#com.google.fonts/check/contour_count">com.google.fonts/check/contour_count</a>)</summary><div>
 
@@ -209,8 +234,32 @@ The following glyphs do not have the recommended number of contours:
 
 	- Glyph name: aogonek	Contours detected: 3	Expected: 2 
 
-	- And Glyph name: uogonek	Contours detected: 2	Expected: 1
+	- Glyph name: uogonek	Contours detected: 2	Expected: 1
  [code: contour-count]
+</div></details><details><summary>⚠ <b>WARN:</b> Check math signs have the same width. (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/universal.html#com.google.fonts/check/math_signs_width">com.google.fonts/check/math_signs_width</a>)</summary><div>
+
+
+* ⚠ **WARN** The most common width is 654 among a set of 1 math glyphs.
+The following math glyphs have a different width, though:
+
+Width = 1131:
+less
+
+Width = 740:
+equal
+
+Width = 1130:
+greater
+
+Width = 593:
+multiply
+
+Width = 572:
+divide
+
+Width = 322:
+minus
+ [code: width-outliers]
 </div></details><details><summary>⚠ <b>WARN:</b> Font has correct post table version? (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/post.html#com.google.fonts/check/post_table_version">com.google.fonts/check/post_table_version</a>)</summary><div>
 
 
@@ -220,18 +269,14 @@ The following glyphs do not have the recommended number of contours:
 
 * ⚠ **WARN** The following mark characters could be in the GDEF mark glyph class:
 	 u1BC9D (U+1BC9D) [code: mark-chars]
-</div></details><details><summary>⚠ <b>WARN:</b> Does GPOS table have kerning information? This check skips monospaced fonts as defined by post.isFixedPitch value (<a href="https://font-bakery.readthedocs.io/en/stable/fontbakery/profiles/gpos.html#com.google.fonts/check/gpos_kerning_info">com.google.fonts/check/gpos_kerning_info</a>)</summary><div>
-
-
-* ⚠ **WARN** GPOS table lacks kerning information. [code: lacks-kern-info]
 </div></details><br></div></details>
 
 ### Summary
 
 | 💔 ERROR | 🔥 FAIL | ⚠ WARN | 💤 SKIP | ℹ INFO | 🍞 PASS | 🔎 DEBUG |
 |:-----:|:----:|:----:|:----:|:----:|:----:|:----:|
-| 0 | 4 | 19 | 234 | 15 | 179 | 0 |
-| 0% | 1% | 4% | 52% | 3% | 40% | 0% |
+| 0 | 6 | 19 | 242 | 15 | 182 | 0 |
+| 0% | 1% | 4% | 52% | 3% | 39% | 0% |
 
 **Note:** The following loglevels were omitted in this report:
 * **SKIP**

@@ -1,18 +1,14 @@
 """Hotfix Noto Sans Duployan"""
 import requests
 import argparse
-from glyphsets import GFGlyphData
+from glyphsets import unicodes_per_glyphset
 from fontTools.subset import Subsetter
 from fontTools.merge import Merger
 from fontTools.ttLib import TTFont
 from gftools.fix import fix_font
 
 
-unicodes = [
-    x["unicode"]
-    for x in GFGlyphData.glyphs_in_glyphsets(["GF_Latin_Core"])
-    if x["unicode"]
-]
+unicodes = unicodes_per_glyphset("GF_Latin_Core"])
 
 NOTO_SANS_DEV = "https://notofonts.github.io/latin-greek-cyrillic/fonts/NotoSans/hinted/ttf/NotoSans-Regular.ttf"
 NOTO_SANS_DEV_BOLD = "https://notofonts.github.io/latin-greek-cyrillic/fonts/NotoSans/hinted/ttf/NotoSans-Bold.ttf"

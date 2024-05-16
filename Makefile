@@ -1,6 +1,6 @@
 STYLES = Regular Bold
 FONT_FAMILY_NAME = NotoSansDuployan
-VERSION = 3.001
+VERSION = 3.002
 RELEASE = --release
 CHECK_ARGS = --incomplete
 override NOTO = --noto

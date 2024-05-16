@@ -8,7 +8,7 @@ from fontTools.ttLib import TTFont
 from gftools.fix import fix_font
 
 
-unicodes = unicodes_per_glyphset("GF_Latin_Core"])
+unicodes = unicodes_per_glyphset("GF_Latin_Core")
 
 NOTO_SANS_DEV = "https://notofonts.github.io/latin-greek-cyrillic/fonts/NotoSans/hinted/ttf/NotoSans-Regular.ttf"
 NOTO_SANS_DEV_BOLD = "https://notofonts.github.io/latin-greek-cyrillic/fonts/NotoSans/hinted/ttf/NotoSans-Bold.ttf"

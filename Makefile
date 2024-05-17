@@ -57,6 +57,7 @@ $(addprefix fonts/$(FONT_FAMILY_NAME)/hinted/otf/NotoSansDuployan-,$(addsuffix .
 $(addprefix fonts/$(FONT_FAMILY_NAME)/googlefonts/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/googlefonts/ttf/%.ttf: fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/%.ttf venv
 	mkdir -p "$$(dirname "$@")"
 	. venv/bin/activate ; python3 scripts/hotfix.py -o $@ $<
+	. venv/bin/activate ; gftools-fix-font $@ -o $@
 
 .init.stamp: venv
 	. venv/bin/activate; python3 scripts/first-run.py

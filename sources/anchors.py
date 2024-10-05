@@ -1,4 +1,4 @@
-# Copyright 2018-2019 David Corbett
+# Copyright 2018-2019, 2023-2024 David Corbett
 # Copyright 2020-2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,42 +13,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__all__ = [
-    'ABOVE',
-    'ALL',
-    'ALL_CURSIVE',
-    'ALL_MARK',
-    'ALL_MKMK',
-    'BELOW',
-    'CHILD_EDGES',
-    'CONTINUING_OVERLAP',
-    'CURSIVE',
-    'INTER_EDGES',
-    'MIDDLE',
-    'PARENT_EDGE',
-    'POST_HUB_CONTINUING_OVERLAP',
-    'POST_HUB_CURSIVE',
-    'PRE_HUB_CONTINUING_OVERLAP',
-    'PRE_HUB_CURSIVE',
-    'RELATIVE_1',
-    'RELATIVE_2',
-    'SECANT',
-]
+from __future__ import annotations
 
-
-from collections.abc import Sequence
 from typing import Final
-from typing import Iterable
-
+from typing import TYPE_CHECKING
 
 from utils import MAX_TREE_DEPTH
 from utils import MAX_TREE_WIDTH
 
 
+if TYPE_CHECKING:
+    from collections.abc import Collection
+    from collections.abc import Sequence
+
+
 PARENT_EDGE: Final[str] = 'pe'
 
 
-CHILD_EDGES: Final[Sequence[Sequence[str]]] = [[f'ce{layer_index}_{child_index + 1}' for child_index in range(MAX_TREE_WIDTH)] for layer_index in range(min(2, MAX_TREE_DEPTH))]
+CHILD_EDGES: Final[Sequence[Sequence[str]]] = [
+    [f'ce{layer_index}_{child_index + 1}' for child_index in range(MAX_TREE_WIDTH)]
+    for layer_index in range(min(2, MAX_TREE_DEPTH))
+]
 
 
 INTER_EDGES: Final[Sequence[Sequence[str]]] = [[f'edge{layer_index}_{child_index + 1}' for child_index in range(MAX_TREE_WIDTH)] for layer_index in range(MAX_TREE_DEPTH)]
@@ -81,7 +66,8 @@ ALL_MKMK: Final[list[str]] = [
 ]
 
 
-ALL_MARK: Final[list[str]] = ALL_MKMK + [
+ALL_MARK: Final[list[str]] = [
+    *ALL_MKMK,
     SECANT,
 ]
 
@@ -113,4 +99,4 @@ ALL_CURSIVE: Final[list[str]] = [
 ]
 
 
-ALL: Final[Iterable[str]] = ALL_MARK + ALL_CURSIVE
+ALL: Final[Collection[str]] = ALL_MARK + ALL_CURSIVE

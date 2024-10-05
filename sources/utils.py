@@ -1,4 +1,4 @@
-# Copyright 2018-2019, 2022 David Corbett
+# Copyright 2018-2019, 2022-2024 David Corbett
 # Copyright 2019-2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,67 +19,110 @@
 
 from __future__ import annotations
 
-
-__all__ = [
-    'BRACKET_DEPTH',
-    'BRACKET_HEIGHT',
-    'CAP_HEIGHT',
-    'CLONE_DEFAULT',
-    'CURVE_OFFSET',
-    'Context',
-    'EPSILON',
-    'GlyphClass',
-    'MAX_TREE_DEPTH',
-    'MAX_TREE_WIDTH',
-    'MINIMUM_STROKE_GAP',
-    'NO_CONTEXT',
-    'OrderedSet',
-    'PrefixView',
-    'REGULAR_LIGHT_LINE',
-    'SHADING_FACTOR',
-    'STRIKEOUT_POSITION',
-    'Type',
-    'WIDTH_MARKER_PLACES',
-    'WIDTH_MARKER_RADIX',
-    'mkmk',
-]
-
-
-from collections.abc import Collection
-from collections.abc import ItemsView
-from collections.abc import KeysView
-from collections.abc import Mapping
 from collections.abc import MutableMapping
 import enum
-from typing import Callable
-from typing import ClassVar
+import functools
 from typing import Final
 from typing import Generic
-from typing import Iterable
-from typing import Iterator
 from typing import Literal
-from typing import Optional
+from typing import Self
+from typing import TYPE_CHECKING
 from typing import TypeVar
 from typing import overload
+
+import fontTools.subset
+from typing_extensions import override
+import uharfbuzz
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from collections.abc import ItemsView
+    from collections.abc import Iterable
+    from collections.abc import Iterator
+    from collections.abc import KeysView
+    from collections.abc import Mapping
+    from collections.abc import Sequence
+    from collections.abc import Set as AbstractSet
+
+    from _typeshed import SupportsRichComparison
 
 
 #: The regular font’s cap height.
 CAP_HEIGHT: Final[float] = 714
 
 
+#: The factor of the cap height in the regular font by which brackets
+#: and related punctuation reach above the cap height or below the
+#: baseline.
+BRACKET_Y_FACTOR: Final[float] = 0.27
+
+
 #: The lowest point of brackets and related punctuation in the regular
 #: font.
-BRACKET_DEPTH: Final[float] = -0.27 * CAP_HEIGHT
+BRACKET_DEPTH: Final[float] = -BRACKET_Y_FACTOR * CAP_HEIGHT
 
 
 #: The highest point of brackets and related punctuation in the regular
 #: font.
-BRACKET_HEIGHT: Final[float] = 1.27 * CAP_HEIGHT
+BRACKET_HEIGHT: Final[float] = (1 + BRACKET_Y_FACTOR) * CAP_HEIGHT
+
+
+#: The lowest point of crosses and related symbols in the regular font.
+CROSS_DEPTH: Final[float] = -0.4 * CAP_HEIGHT
+
+
+#: The highest point of crosses and related symbols in the regular font.
+CROSS_HEIGHT: Final[float] = 1.1 * CAP_HEIGHT
+
+
+#: The factor of the cap height in the regular font by which pictographs
+#: reach above the cap height or below the baseline.
+PICTOGRAPH_Y_FACTOR: Final[float] = 0.5
+
+
+#: The lowest point of pictographs in the regular font.
+PICTOGRAPH_DEPTH: Final[float] = -PICTOGRAPH_Y_FACTOR * CAP_HEIGHT
+
+
+#: The highest point of pictographs in the regular font.
+PICTOGRAPH_HEIGHT: Final[float] = (1 + PICTOGRAPH_Y_FACTOR) * CAP_HEIGHT
+
+
+#: The factor of the cap height in the regular font by which to scale
+#: digits to get their numerator, denominator, superscript, and
+#: subscript forms.
+SMALL_DIGIT_FACTOR: Final[float] = 0.633
+
+
+#: The factor of the cap height in the regular font by which
+#: superscripts and subscripts reach above the cap height or below the
+#: baseline.
+SCRIPT_Y_FACTOR: Final[float] = 0.18
+
+
+#: The lowest point of subscripts in the regular font.
+SUBSCRIPT_DEPTH: Final[float] = -SCRIPT_Y_FACTOR * CAP_HEIGHT
+
+
+#: The highest point of superscripts in the regular font.
+SUPERSCRIPT_HEIGHT: Final[float] = (1 + SCRIPT_Y_FACTOR) * CAP_HEIGHT
+
+
+#: The regular font’s x height.
+X_HEIGHT: Final[float] = 507
+
+
+class CloneDefault(enum.Enum):
+    """The type of `CLONE_DEFAULT`.
+    """
+
+    _CLONE_DEFAULT = enum.auto()
 
 
 #: An object that various classes’ ``clone`` methods interpret as the
 #: value of the relevant attribute in the object being cloned.
-CLONE_DEFAULT = object()
+CLONE_DEFAULT: Final = CloneDefault._CLONE_DEFAULT
 
 
 #: The non-negative angle by which to offset the angle at the endpoint
@@ -153,6 +196,172 @@ WIDTH_MARKER_RADIX: Final[int] = 4
 assert WIDTH_MARKER_RADIX % 2 == 0, 'WIDTH_MARKER_RADIX must be even'
 
 
+_INITIAL_STAGES: Final[Sequence[AbstractSet[str]]] = [
+    {
+        'rvrn',
+    },
+    {
+        'dnom',
+        'frac',
+        'numr',
+    },
+]
+
+
+_COMMON_DISCRETIONARY_FEATURES: Final[AbstractSet[str]] = {
+    'afrc',
+    'calt',
+    'clig',
+    'cswh',
+    *{f'cv{x:02}' for x in range(1, 100)},
+    'dlig',
+    'hist',
+    'hlig',
+    'kern',
+    'liga',
+    'lnum',
+    'onum',
+    'ordn',
+    'pnum',
+    'salt',
+    'sinf',
+    *{f'ss{x:02}' for x in range(1, 21)},
+    'subs',
+    'sups',
+    'swsh',
+    'titl',
+    'tnum',
+    'zero',
+}
+
+
+_COMMON_REQUIRED_FEATURES: Final[AbstractSet[str]] = {
+    'abvm',
+    'blwm',
+    'curs',
+    'dist',
+    'mark',
+    'mkmk',
+    'rclt',
+    'rlig',
+}
+
+
+#: The set of features that are not necessarily applied automatically to
+#: all characters by any shaper that enables them. This includes
+#: features like 'dlig' that are meant to be enabled by the user, as
+#: well as features like 'dnom' that may be enabled automatically but
+#: not to all characters.
+DISCRETIONARY_FEATURES: Final[AbstractSet[str]] = {
+    *_COMMON_DISCRETIONARY_FEATURES,
+    'dnom',
+    'numr',
+}
+
+
+#: The set of features that are guaranteed to be applied to all
+#: characters by any shaper that enables them. (This assumes no required
+#: features are disabled by the user, which is technically possible but
+#: not recommended).
+REQUIRED_FEATURES: Final[AbstractSet[str]] = {
+    *_COMMON_REQUIRED_FEATURES,
+    'abvs',
+    'blws',
+    'haln',
+    'locl',
+    'pres',
+    'psts',
+    'rvrn',
+}
+
+
+#: The union of `DISCRETIONARY_FEATURES` and `REQUIRED_FEATURES`.
+KNOWN_FEATURES: Final[AbstractSet[str]] = DISCRETIONARY_FEATURES | REQUIRED_FEATURES
+
+
+#: A mapping from script tags to their features, organized by shape
+#: plan. This includes all features, required or discretionary. A shape
+#: plan is represented as a list of stages, where a stage is a set of
+#: feature tags. All the features in one stage are applied before the
+#: features in the next stage.
+KNOWN_SHAPE_PLANS: Final[Mapping[str, Sequence[AbstractSet[str]]]] = {
+    'DFLT': [
+        *_INITIAL_STAGES,
+        {
+            *_COMMON_DISCRETIONARY_FEATURES,
+            *_COMMON_REQUIRED_FEATURES,
+            'locl',
+        },
+    ],
+    'dupl': [
+        *_INITIAL_STAGES,
+        {
+            *_COMMON_DISCRETIONARY_FEATURES,
+            *_COMMON_REQUIRED_FEATURES,
+            'abvs',
+            'blws',
+            'haln',
+            'pres',
+            'psts',
+        },
+    ],
+}
+
+
+assert all(
+        sum(map(len, shape_plan)) == len(set().union(*shape_plan))
+        for shape_plan in KNOWN_SHAPE_PLANS.values()
+    ), 'A shape plan in `KNOWN_SHAPE_PLANS` contains two stages that share the same feature'
+
+
+if __debug__:
+    _really_known_features = {feature for shape_plan in KNOWN_SHAPE_PLANS.values() for stage in shape_plan for feature in stage}
+    assert KNOWN_FEATURES <= _really_known_features, (
+        f'''`KNOWN_FEATURES` contains extra features: {', '.join(f"'{feature}'" for feature in KNOWN_FEATURES - _really_known_features)}''')
+
+
+#: The list of script tags that can appear in the generated font.
+KNOWN_SCRIPTS: Final[Iterable[str]] = sorted(KNOWN_SHAPE_PLANS)
+
+
+#: The set of features that should be included in the subsetted font.
+SUBSET_FEATURES: AbstractSet[str] = (frozenset(fontTools.subset.Options().layout_features)
+    - {'abvs', 'blwm', 'curs', 'dist', 'rclt'}
+    | {'subs', 'sups'}
+)
+
+
+@functools.cache
+def cps_to_scripts(cps: Sequence[int]) -> set[str]:
+    """Converts a code point sequence to its set of script tags.
+
+    Args:
+        cps: A code point sequence. It is assumed that the code points
+            all appear in the same item, meaning they have at most one
+            distinct script tag.
+
+    Returns:
+        The set of all script tags such that a rule in a lookup
+        associated with one of those tags could possibly apply to a
+        glyph that corresponds to those code points. The return value is
+        a subset of the full set of known script tags (`KNOWN_SCRIPTS`).
+
+        If `cps` contains only script-neutral code points, the full set
+        is returned; otherwise, the returned set contains a single tag.
+        That single tag is ``'DFLT'`` if `KNOWN_SCRIPTS` does not
+        contain the true specific script tag.
+    """
+    buffer = uharfbuzz.Buffer()
+    buffer.add_codepoints([*cps])
+    buffer.guess_segment_properties()
+    if buffer.script is None:
+        return set(KNOWN_SCRIPTS)
+    script = buffer.script.lower()
+    if script not in KNOWN_SCRIPTS:
+        return {'DFLT'}
+    return {script}
+
+
 def mkmk(anchor: str) -> str:
     """Returns the name of a 'mkmk' anchor that is analogous to a 'mark'
     anchor.
@@ -173,14 +382,14 @@ class GlyphClass(enum.StrEnum):
 
     #: The class of a spacing glyph that does not participate in cursive
     #: joining.
-    BLOCKER: ClassVar[str] = 'baseglyph'
+    BLOCKER: Final[str] = 'noclass'
 
     #: The class of a spacing glyph that participates in cursive
     #: joining.
-    JOINER: ClassVar[str] = 'baseligature'
+    JOINER: Final[str] = 'baseligature'
 
     #: The class of a mark glyph.
-    MARK: ClassVar[str] = 'mark'
+    MARK: Final[str] = 'mark'
 
 
 class Type(enum.Enum):
@@ -241,7 +450,7 @@ class Context:
     def __init__(
         self,
         angle: float,
-        clockwise: Optional[bool] = ...,
+        clockwise: bool | None = ...,
         *,
         minor: bool = ...,
         ignorable_for_topography: bool = ...,
@@ -265,8 +474,8 @@ class Context:
 
     def __init__(
         self,
-        angle: Optional[float] = None,
-        clockwise: Optional[bool] = None,
+        angle: float | None = None,
+        clockwise: bool | None = None,
         *,
         minor: bool = False,
         ignorable_for_topography: bool = False,
@@ -295,15 +504,15 @@ class Context:
     def clone(
         self,
         *,
-        angle=CLONE_DEFAULT,
-        clockwise=CLONE_DEFAULT,
-        minor=CLONE_DEFAULT,
-        ignorable_for_topography=CLONE_DEFAULT,
-        diphthong_start=CLONE_DEFAULT,
-        diphthong_end=CLONE_DEFAULT,
-    ):
+        angle: float | None | CloneDefault = CLONE_DEFAULT,
+        clockwise: bool | None | CloneDefault = CLONE_DEFAULT,
+        minor: bool | CloneDefault = CLONE_DEFAULT,
+        ignorable_for_topography: bool | CloneDefault = CLONE_DEFAULT,
+        diphthong_start: bool | CloneDefault = CLONE_DEFAULT,
+        diphthong_end: bool | CloneDefault = CLONE_DEFAULT,
+    ) -> Self:
         return type(self)(
-            self.angle if angle is CLONE_DEFAULT else angle,
+            self.angle if angle is CLONE_DEFAULT else angle,  # type: ignore[arg-type]
             self.clockwise if clockwise is CLONE_DEFAULT else clockwise,
             minor=self.minor if minor is CLONE_DEFAULT else minor,
             ignorable_for_topography=self.ignorable_for_topography if ignorable_for_topography is CLONE_DEFAULT else ignorable_for_topography,
@@ -311,6 +520,7 @@ class Context:
             diphthong_end=self.diphthong_end if diphthong_end is CLONE_DEFAULT else diphthong_end,
         )
 
+    @override
     def __repr__(self) -> str:
         return f'''Context({
                 self.angle
@@ -326,6 +536,7 @@ class Context:
                 self.diphthong_end
             })'''
 
+    @override
     def __str__(self) -> str:
         if self.angle is None:
             return ''
@@ -345,6 +556,7 @@ class Context:
             '2' if self.diphthong_end else ''
         }'''
 
+    @override
     def __eq__(self, other: object) -> bool:
         if not (isinstance(self, type(other)) and isinstance(other, type(self))):
             return NotImplemented
@@ -356,10 +568,12 @@ class Context:
             and self.diphthong_end == other.diphthong_end
         )
 
+    @override
     def __ne__(self, other: object) -> bool:
         eq = self == other
         return eq if eq is NotImplemented else not eq
 
+    @override
     def __hash__(self) -> int:
         return (
             hash(self.angle)
@@ -370,7 +584,7 @@ class Context:
             ^ hash(self.diphthong_end)
         )
 
-    def reversed(self) -> Context:
+    def as_reversed(self) -> Self:
         """Returns the reversed form of this context.
 
         The reversed form is the context where the notional pen travels
@@ -399,18 +613,17 @@ class Context:
         """
         if self.angle is None or other.angle is None:
             return False
-        angle_in = self.angle
-        angle_out = other.angle
+        da = (other.angle - self.angle) % 360
+        maximum_da = 180.0
         if self.clockwise:
-            angle_in += CURVE_OFFSET
+            maximum_da += CURVE_OFFSET
         elif self.clockwise is False:
-            angle_in -= CURVE_OFFSET
+            maximum_da -= CURVE_OFFSET
         if other.clockwise:
-            angle_out -= CURVE_OFFSET
+            maximum_da += CURVE_OFFSET
         elif other.clockwise is False:
-            angle_out += CURVE_OFFSET
-        da = abs(angle_out - angle_in)
-        return da % 180 != 0 and (da >= 180) != (angle_out > angle_in)
+            maximum_da -= CURVE_OFFSET
+        return 0 < da < maximum_da
 
 
 #: The context representing a lack of contextual information.
@@ -429,7 +642,7 @@ class OrderedSet(dict[_T, None]):
 
     def __init__(
         self,
-        iterable: Optional[Iterable[_T]] = None,
+        iterable: Iterable[_T] | None = None,
         /,
     ) -> None:
         """Initializes this `OrderedSet`.
@@ -461,7 +674,15 @@ class OrderedSet(dict[_T, None]):
         """
         self.pop(item, None)
 
-    def sorted(self, /, *, key=None, reverse: bool = False) -> list[_T]:
+    @overload
+    def sorted(self, /, *, key: None = ..., reverse: bool = ...) -> list[_T]:
+        ...
+
+    @overload
+    def sorted(self, /, *, key: Callable[[_T], SupportsRichComparison], reverse: bool = ...) -> list[_T]:
+        ...
+
+    def sorted(self, /, *, key: Callable[[_T], SupportsRichComparison] | None = None, reverse: bool = False) -> list[_T]:
         """Returns a sorted list of the elements in this set.
 
         The sort is stable.
@@ -470,12 +691,12 @@ class OrderedSet(dict[_T, None]):
             key: An optional key function by which to sort the items.
                 This must be given if the items are not inherently
                 ordered.
-            reversed: Whether to sort in descending order.
+            reverse: Whether to sort in descending order.
         """
-        return sorted(self.keys(), key=key, reverse=reverse)
+        return sorted(self.keys(), key=key, reverse=reverse)  # type: ignore[arg-type, type-var]
 
 
-class PrefixView(Generic[_T], MutableMapping[str, _T]):
+class PrefixView(MutableMapping[str, _T], Generic[_T]):
     """A mutable view of a string-keyed mapping with a prefix applied to
     all keys.
 
@@ -493,17 +714,22 @@ class PrefixView(Generic[_T], MutableMapping[str, _T]):
     ``".."``. The other is ``"global.."``. Only the former is
     automatically added by this view. If a key has the global prefix,
     the view passes it through to the underlying mapping unchanged;
-    otherwise, if a key passed to a method of a view must not contain
+    otherwise, a key passed to a method of a view must not contain
     ``".."``.
     """
 
-    def __init__(self, source: Callable, delegate: MutableMapping[str, _T]) -> None:
+    def __init__(
+        self,
+        source: function,  # noqa: F821
+        delegate: MutableMapping[str, _T],
+    ) -> None:
         """Initializes this `PrefixView`.
 
         Args:
             source: A function from which to derive the prefix.
+            delegate: The mapping to wrap.
         """
-        self._prefix: Final = f'{source.__name__}..'
+        self._prefix: Final = f'{source.__module__}.{source.__qualname__}..'
         self._delegate: Final = delegate
 
     def _prefixed(self, key: str) -> str:
@@ -511,11 +737,15 @@ class PrefixView(Generic[_T], MutableMapping[str, _T]):
 
         It is not necessary to prepend the prefix if the key already
         uses the global prefix.
+
+        Args:
+            key: The key to which to prepend the prefix.
         """
         is_global = key.startswith('global..')
         assert len(key.split('..')) == 1 + is_global, f'Invalid key: {key!r}'
         return key if is_global else self._prefix + key
 
+    @override
     def __getitem__(self, key: str, /) -> _T:
         """Returns the item associated with a prefixed key.
 
@@ -524,6 +754,7 @@ class PrefixView(Generic[_T], MutableMapping[str, _T]):
         """
         return self._delegate[self._prefixed(key)]
 
+    @override
     def __setitem__(self, key: str, value: _T, /) -> None:
         """Maps a prefixed key to a value.
 
@@ -533,6 +764,7 @@ class PrefixView(Generic[_T], MutableMapping[str, _T]):
         """
         self._delegate[self._prefixed(key)] = value
 
+    @override
     def __delitem__(self, key: str, /) -> None:
         """Deletes an entry from this mapping.
 
@@ -544,6 +776,7 @@ class PrefixView(Generic[_T], MutableMapping[str, _T]):
         """
         del self._delegate[self._prefixed(key)]
 
+    @override
     def __contains__(self, item: object, /) -> bool:
         """Returns whether a prefixed key is mapped to a value.
 
@@ -552,14 +785,18 @@ class PrefixView(Generic[_T], MutableMapping[str, _T]):
         """
         return isinstance(item, str) and self._prefixed(item) in self._delegate
 
+    @override
     def __iter__(self, /) -> Iterator[str]:
         return iter(self._delegate)
 
+    @override
     def __len__(self, /) -> int:
         return len(self._delegate)
 
+    @override
     def keys(self) -> KeysView[str]:
         return self._delegate.keys()
 
+    @override
     def items(self) -> ItemsView[str, _T]:
         return self._delegate.items()

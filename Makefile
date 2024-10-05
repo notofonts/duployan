@@ -1,21 +1,29 @@
-STYLES = Regular Bold
-FONT_FAMILY_NAME = NotoSansDuployan
+WEIGHTS = Regular Bold
+ifdef UNJOINED
+    override UNJOINED = --unjoined
+endif
+FONT_FAMILY_NAME = Noto Sans Duployan$(if $(UNJOINED), Unjoined)
+CHARSET = noto
 VERSION = 3.002
 RELEASE = --release
-CHECK_ARGS = --incomplete
 override NOTO = --noto
+unexport CHARSET
 SUFFIXES = otf ttf
+
+CHECK_ARGS = $(if $(filter testing,$(CHARSET)),,--incomplete)
+FONT_FILE_NAME = $(subst $(eval ) ,,$(FONT_FAMILY_NAME))
+
 FONTS = \
-	fonts/NotoSansDuployan/unhinted/otf/NotoSansDuployan-Regular.otf \
-	fonts/NotoSansDuployan/unhinted/otf/NotoSansDuployan-Bold.otf \
-	fonts/NotoSansDuployan/unhinted/ttf/NotoSansDuployan-Regular.ttf \
-	fonts/NotoSansDuployan/unhinted/ttf/NotoSansDuployan-Bold.ttf \
-	fonts/NotoSansDuployan/hinted/otf/NotoSansDuployan-Regular.otf \
-	fonts/NotoSansDuployan/hinted/otf/NotoSansDuployan-Bold.otf \
-	fonts/NotoSansDuployan/hinted/ttf/NotoSansDuployan-Regular.ttf \
-	fonts/NotoSansDuployan/hinted/ttf/NotoSansDuployan-Bold.ttf \
-	fonts/NotoSansDuployan/googlefonts/ttf/NotoSansDuployan-Regular.ttf \
-	fonts/NotoSansDuployan/googlefonts/ttf/NotoSansDuployan-Bold.ttf \
+	fonts/$(FONT_FILE_NAME)/unhinted/otf/$(FONT_FILE_NAME)-Regular.otf \
+	fonts/$(FONT_FILE_NAME)/unhinted/otf/$(FONT_FILE_NAME)-Bold.otf \
+	fonts/$(FONT_FILE_NAME)/unhinted/ttf/$(FONT_FILE_NAME)-Regular.ttf \
+	fonts/$(FONT_FILE_NAME)/unhinted/ttf/$(FONT_FILE_NAME)-Bold.ttf \
+	fonts/$(FONT_FILE_NAME)/hinted/otf/$(FONT_FILE_NAME)-Regular.otf \
+	fonts/$(FONT_FILE_NAME)/hinted/otf/$(FONT_FILE_NAME)-Bold.otf \
+	fonts/$(FONT_FILE_NAME)/hinted/ttf/$(FONT_FILE_NAME)-Regular.ttf \
+	fonts/$(FONT_FILE_NAME)/hinted/ttf/$(FONT_FILE_NAME)-Bold.ttf \
+	fonts/$(FONT_FILE_NAME)/googlefonts/ttf/$(FONT_FILE_NAME)-Regular.ttf \
+	fonts/$(FONT_FILE_NAME)/googlefonts/ttf/$(FONT_FILE_NAME)-Bold.ttf \
 
 
 help:
@@ -36,25 +44,25 @@ venv: venv/touchfile
 build: venv .init.stamp sources/config*.yaml $(FONTS)
 
 
-fonts/$(FONT_FAMILY_NAME)/unhinted/otf/NotoSansDuployan-Regular.otf: sources/Duployan.fea sources/*.py venv
-	. venv/bin/activate ; python sources/build.py --fea $< $(NOTO) --output $@ $(RELEASE) --version $(VERSION)
+fonts/$(FONT_FILE_NAME)/unhinted/otf/$(FONT_FILE_NAME)-Regular.otf: sources/metadata.fea $(shell find sources -name '*.py') venv
+	. venv/bin/activate ; python sources/build.py --charset $(CHARSET) --fea $< --name '$(FONT_FAMILY_NAME)' $(NOTO) --output $@ $(RELEASE) $(UNJOINED) --version $(VERSION)
 
-fonts/$(FONT_FAMILY_NAME)/unhinted/otf/NotoSansDuployan-Bold.otf: sources/Duployan.fea sources/*.py venv
-	. venv/bin/activate ; python sources/build.py --bold --fea $< $(NOTO) --output $@ $(RELEASE) --version $(VERSION)
+fonts/$(FONT_FILE_NAME)/unhinted/otf/$(FONT_FILE_NAME)-Bold.otf: sources/metadata.fea $(shell find sources -name '*.py') venv
+	. venv/bin/activate ; python sources/build.py --bold --charset $(CHARSET) --fea $< --name '$(FONT_FAMILY_NAME)' $(NOTO) --output $@ $(RELEASE) $(UNJOINED) --version $(VERSION)
 
-$(addprefix fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/%.ttf: fonts/$(FONT_FAMILY_NAME)/unhinted/otf/%.otf venv
+$(addprefix fonts/$(FONT_FILE_NAME)/unhinted/ttf/$(FONT_FILE_NAME)-,$(addsuffix .ttf,$(WEIGHTS))): fonts/$(FONT_FILE_NAME)/unhinted/ttf/%.ttf: fonts/$(FONT_FILE_NAME)/unhinted/otf/%.otf venv
 	mkdir -p "$$(dirname "$@")"
 	. venv/bin/activate ; python sources/otf2ttf.py --output "$@" --overwrite "$<"
 
-$(addprefix fonts/$(FONT_FAMILY_NAME)/hinted/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/hinted/ttf/%.ttf: fonts/$(FONT_FAMILY_NAME)/unhinted/otf/%.otf venv
+$(addprefix fonts/$(FONT_FILE_NAME)/hinted/ttf/$(FONT_FILE_NAME)-,$(addsuffix .ttf,$(WEIGHTS))): fonts/$(FONT_FILE_NAME)/hinted/ttf/%.ttf: fonts/$(FONT_FILE_NAME)/unhinted/otf/%.otf venv
 	mkdir -p "$$(dirname "$@")"
 	cp $< $@
 
-$(addprefix fonts/$(FONT_FAMILY_NAME)/hinted/otf/NotoSansDuployan-,$(addsuffix .otf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/hinted/otf/%.otf: fonts/$(FONT_FAMILY_NAME)/unhinted/otf/%.otf venv
+$(addprefix fonts/$(FONT_FILE_NAME)/hinted/otf/$(FONT_FILE_NAME)-,$(addsuffix .otf,$(WEIGHTS))): fonts/$(FONT_FILE_NAME)/hinted/otf/%.otf: fonts/$(FONT_FILE_NAME)/unhinted/otf/%.otf venv
 	mkdir -p "$$(dirname "$@")"
 	cp $< $@
 
-$(addprefix fonts/$(FONT_FAMILY_NAME)/googlefonts/ttf/NotoSansDuployan-,$(addsuffix .ttf,$(STYLES))): fonts/$(FONT_FAMILY_NAME)/googlefonts/ttf/%.ttf: fonts/$(FONT_FAMILY_NAME)/unhinted/ttf/%.ttf venv
+$(addprefix fonts/$(FONT_FILE_NAME)/googlefonts/ttf/$(FONT_FILE_NAME)-,$(addsuffix .ttf,$(WEIGHTS))): fonts/$(FONT_FILE_NAME)/googlefonts/ttf/%.ttf: fonts/$(FONT_FILE_NAME)/unhinted/ttf/%.ttf venv
 	mkdir -p "$$(dirname "$@")"
 	. venv/bin/activate ; python3 scripts/hotfix.py -o $@ $<
 	. venv/bin/activate ; gftools-fix-font $@ -o $@

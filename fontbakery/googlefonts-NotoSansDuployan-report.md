@@ -1,97 +1,17 @@
 ## FontBakery report
 
-fontbakery version: 0.12.6
+fontbakery version: 0.12.10
 
 
 
-## Experimental checks
-
-These won't break the CI job for now, but will become effective after some time if nobody raises any concern.
 
 
-<details><summary>[1] NotoSansDuployan-Bold.ttf</summary>
+## Check results
+
+
+
+<details><summary>[14] NotoSansDuployan-Bold.ttf</summary>
 <div>
-<details>
-    <summary>⚠️ <b>WARN</b> Validate location, size and resolution of article images. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/googlefonts.article.html#"></a></summary>
-    <div>
-
-
-
-
-
-
-
-* ⚠️ **WARN** <p>Family metadata at fonts/NotoSansDuployan/googlefonts/ttf does not have an article.</p>
- [code: lacks-article]
-
-
-
-</div>
-</details>
-</div>
-</details>
-
-<details><summary>[1] NotoSansDuployan-Regular.ttf</summary>
-<div>
-<details>
-    <summary>⚠️ <b>WARN</b> Validate location, size and resolution of article images. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/googlefonts.article.html#"></a></summary>
-    <div>
-
-
-
-
-
-
-
-* ⚠️ **WARN** <p>Family metadata at fonts/NotoSansDuployan/googlefonts/ttf does not have an article.</p>
- [code: lacks-article]
-
-
-
-</div>
-</details>
-</div>
-</details>
-
-
-
-
-## All other checks
-
-
-
-<details><summary>[15] NotoSansDuployan-Bold.ttf</summary>
-<div>
-<details>
-    <summary>🔥 <b>FAIL</b> Ensure dotted circle glyph is present and can attach marks. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/shaping.html#"></a></summary>
-    <div>
-
-
-
-
-
-
-
-* 🔥 **FAIL** <p>The following glyphs could not be attached to the dotted circle glyph:</p>
-<pre><code>- tildecomb
-
-- uni030A
-
-- uni030B
-
-- uni0326
-
-- uni0327
-
-- uni0328
-</code></pre>
- [code: unattached-dotted-circle-marks]
-
-
-
-</div>
-</details>
-
 <details>
     <summary>🔥 <b>FAIL</b> Check for presence of an ARTICLE.en_us.html file <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/googlefonts.description.html#"></a></summary>
     <div>
@@ -109,6 +29,34 @@ These won't break the CI job for now, but will become effective after some time 
 
 * 🔥 **FAIL** <p>This is a Noto font but it lacks a DESCRIPTION.en_us.html file.</p>
  [code: missing-description]
+
+
+
+</div>
+</details>
+
+<details>
+    <summary>🔥 <b>FAIL</b> Ensure dotted circle glyph is present and can attach marks. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/shaping.html#"></a></summary>
+    <div>
+
+
+
+
+
+
+
+* 🔥 **FAIL** <p>The following glyphs could not be attached to the dotted circle glyph:</p>
+<pre><code>- tildecomb
+
+- uni030B
+
+- uni0326
+
+- uni0327
+
+- uni0328
+</code></pre>
+ [code: unattached-dotted-circle-marks]
 
 
 
@@ -224,7 +172,7 @@ u1BC9D (U+1BC9D)</p>
 
 
 
-* ⚠️ **WARN** <p>The most common width is 1161 among a set of 2 math glyphs.
+* ⚠️ **WARN** <p>The most common width is 1162 among a set of 2 math glyphs.
 The following math glyphs have a different width, though:</p>
 <p>Width = 686:
 plus</p>
@@ -234,7 +182,7 @@ equal</p>
 multiply</p>
 <p>Width = 572:
 divide</p>
-<p>Width = 322:
+<p>Width = 581:
 minus</p>
  [code: width-outliers]
 
@@ -244,7 +192,7 @@ minus</p>
 </details>
 
 <details>
-    <summary>⚠️ <b>WARN</b> Checking with ots-sanitize. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/universal.html#"></a></summary>
+    <summary>⚠️ <b>WARN</b> Checking with ots-sanitize. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/universal.sanitize.html#"></a></summary>
     <div>
 
 
@@ -264,7 +212,7 @@ WARNING: Layout: tags aren't arranged alphabetically.</p>
 </details>
 
 <details>
-    <summary>⚠️ <b>WARN</b> Check font contains no unreachable glyphs <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/universal.html#"></a></summary>
+    <summary>⚠️ <b>WARN</b> Check font contains no unreachable glyphs <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/universal.glyphset.html#"></a></summary>
     <div>
 
 
@@ -274,11 +222,66 @@ WARNING: Layout: tags aren't arranged alphabetically.</p>
 
 
 * ⚠️ **WARN** <p>The following glyphs could not be reached by codepoint or substitution rules:</p>
-<pre><code>- glyph10355
+<pre><code>- glyph11561
 
-- glyph10451
+- glyph11657
 </code></pre>
  [code: unreachable-glyphs]
+
+
+
+</div>
+</details>
+
+<details>
+    <summary>⚠️ <b>WARN</b> Validate size, and resolution of article images, and ensure article page has minimum length and includes visual assets. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/googlefonts.article.html#"></a></summary>
+    <div>
+
+
+
+
+
+
+
+* ⚠️ **WARN** <p>Family metadata at fonts/NotoSansDuployan/googlefonts/ttf does not have an article.</p>
+ [code: lacks-article]
+
+
+
+</div>
+</details>
+
+<details>
+    <summary>⚠️ <b>WARN</b> Check for codepoints not covered by METADATA subsets. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/googlefonts.subsets.html#"></a></summary>
+    <div>
+
+
+
+
+
+
+
+* ⚠️ **WARN** <p>The following codepoints supported by the font are not covered by
+any subsets defined in the font's metadata file, and will never
+be served. You can solve this by either manually adding additional
+subset declarations to METADATA.pb, or by editing the glyphset
+definitions.</p>
+<ul>
+<li>U+02C7 CARON: try adding one of: yi, tifinagh, canadian-aboriginal</li>
+<li>U+02D8 BREVE: try adding one of: yi, canadian-aboriginal</li>
+<li>U+02D9 DOT ABOVE: try adding one of: yi, canadian-aboriginal</li>
+<li>U+02DB OGONEK: try adding one of: yi, canadian-aboriginal</li>
+<li>U+02DD DOUBLE ACUTE ACCENT: not included in any glyphset definition</li>
+<li>U+0302 COMBINING CIRCUMFLEX ACCENT: try adding one of: coptic, math, tifinagh, cherokee</li>
+<li>U+0306 COMBINING BREVE: try adding one of: old-permic, tifinagh</li>
+<li>U+0307 COMBINING DOT ABOVE: try adding one of: old-permic, tifinagh, coptic, syriac, math, malayalam, tai-le, canadian-aboriginal</li>
+<li>U+030A COMBINING RING ABOVE: try adding syriac</li>
+<li>U+030B COMBINING DOUBLE ACUTE ACCENT: try adding one of: osage, cherokee
+22 more.</li>
+</ul>
+<p>Use -F or --full-lists to disable shortening of long lists.</p>
+<p>Or you can add the above codepoints to one of the subsets supported by the font: <code>duployan</code>, <code>latin</code>, <code>latin-ext</code></p>
+ [code: unreachable-subsetting]
 
 
 
@@ -316,88 +319,10 @@ WARNING: Layout: tags aren't arranged alphabetically.</p>
 
 * Wdieresis (U+1E84): B&lt;&lt;266.0,196.0&gt;-&lt;272.0,161.0&gt;-&lt;275.0,137.0&gt;&gt;/B&lt;&lt;275.0,137.0&gt;-&lt;278.0,162.0&gt;-&lt;284.0,196.5&gt;&gt; = 13.967789761532726
 
-* 148 more.
+* 164 more.
 </code></pre>
 <p>Use -F or --full-lists to disable shortening of long lists.</p>
  [code: found-jaggy-segments]
-
-
-
-</div>
-</details>
-
-<details>
-    <summary>⚠️ <b>WARN</b> Check the direction of the outermost contour in each glyph <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/outline.html#"></a></summary>
-    <div>
-
-
-
-
-
-
-
-* ⚠️ **WARN** <p>The following glyphs have a counter-clockwise outer contour:</p>
-<pre><code>* degree (U+00B0) has a counter-clockwise outer contour
-
-* eight (U+0038) has a counter-clockwise outer contour
-
-* glyph00193 has a counter-clockwise outer contour
-
-* glyph00194 has a counter-clockwise outer contour
-
-* glyph00195 has a counter-clockwise outer contour
-
-* glyph00196 has a counter-clockwise outer contour
-
-* glyph00199 has a counter-clockwise outer contour
-
-* glyph00209 has a counter-clockwise outer contour
-
-* glyph00210 has a counter-clockwise outer contour
-
-* glyph00211 has a counter-clockwise outer contour
-
-* 2316 more.
-</code></pre>
-<p>Use -F or --full-lists to disable shortening of long lists.</p>
- [code: ccw-outer-contour]
-
-
-
-</div>
-</details>
-
-<details>
-    <summary>⚠️ <b>WARN</b> Check for codepoints not covered by METADATA subsets. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/googlefonts.subsets.html#"></a></summary>
-    <div>
-
-
-
-
-
-
-
-* ⚠️ **WARN** <p>The following codepoints supported by the font are not covered by
-any subsets defined in the font's metadata file, and will never
-be served. You can solve this by either manually adding additional
-subset declarations to METADATA.pb, or by editing the glyphset
-definitions.</p>
-<ul>
-<li>U+02C7 CARON: try adding one of: tifinagh, yi, canadian-aboriginal</li>
-<li>U+02D8 BREVE: try adding one of: yi, canadian-aboriginal</li>
-<li>U+02D9 DOT ABOVE: try adding one of: yi, canadian-aboriginal</li>
-<li>U+02DB OGONEK: try adding one of: yi, canadian-aboriginal</li>
-<li>U+02DD DOUBLE ACUTE ACCENT: not included in any glyphset definition</li>
-<li>U+0302 COMBINING CIRCUMFLEX ACCENT: try adding one of: tifinagh, coptic, cherokee, math</li>
-<li>U+0306 COMBINING BREVE: try adding one of: old-permic, tifinagh</li>
-<li>U+0307 COMBINING DOT ABOVE: try adding one of: old-permic, math, canadian-aboriginal, tai-le, tifinagh, syriac, malayalam, coptic</li>
-<li>U+030A COMBINING RING ABOVE: try adding syriac</li>
-<li>U+030B COMBINING DOUBLE ACUTE ACCENT: try adding one of: cherokee, osage
-20 more.</li>
-</ul>
-<p>Use -F or --full-lists to disable shortening of long lists.</p>
-<p>Or you can add the above codepoints to one of the subsets supported by the font: <code>duployan</code>, <code>latin</code>, <code>latin-ext</code></p>
- [code: unreachable-subsetting]
 
 
 
@@ -414,32 +339,8 @@ definitions.</p>
 
 
 
-* ⚠️ **WARN** <p>Font file is 1.7Mb; ideally it should be less than 1.0Mb</p>
+* ⚠️ **WARN** <p>Font file is 1.8Mb; ideally it should be less than 1.0Mb</p>
  [code: large-font]
-
-
-
-</div>
-</details>
-
-<details>
-    <summary>⚠️ <b>WARN</b> Is there kerning info for non-ligated sequences? <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/googlefonts.gpos.html#"></a></summary>
-    <div>
-
-
-
-
-
-
-
-* ⚠️ **WARN** <p>GPOS table lacks kerning info for the following non-ligated sequences:</p>
-<pre><code>- f + f
-
-- f + i
-
-- f + l
-</code></pre>
- [code: lacks-kern-info]
 
 
 
@@ -466,38 +367,8 @@ definitions.</p>
 </div>
 </details>
 
-<details><summary>[14] NotoSansDuployan-Regular.ttf</summary>
+<details><summary>[15] NotoSansDuployan-Regular.ttf</summary>
 <div>
-<details>
-    <summary>🔥 <b>FAIL</b> Ensure dotted circle glyph is present and can attach marks. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/shaping.html#"></a></summary>
-    <div>
-
-
-
-
-
-
-
-* 🔥 **FAIL** <p>The following glyphs could not be attached to the dotted circle glyph:</p>
-<pre><code>- tildecomb
-
-- uni030A
-
-- uni030B
-
-- uni0326
-
-- uni0327
-
-- uni0328
-</code></pre>
- [code: unattached-dotted-circle-marks]
-
-
-
-</div>
-</details>
-
 <details>
     <summary>🔥 <b>FAIL</b> Check for presence of an ARTICLE.en_us.html file <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/googlefonts.description.html#"></a></summary>
     <div>
@@ -515,6 +386,34 @@ definitions.</p>
 
 * 🔥 **FAIL** <p>This is a Noto font but it lacks a DESCRIPTION.en_us.html file.</p>
  [code: missing-description]
+
+
+
+</div>
+</details>
+
+<details>
+    <summary>🔥 <b>FAIL</b> Ensure dotted circle glyph is present and can attach marks. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/shaping.html#"></a></summary>
+    <div>
+
+
+
+
+
+
+
+* 🔥 **FAIL** <p>The following glyphs could not be attached to the dotted circle glyph:</p>
+<pre><code>- tildecomb
+
+- uni030B
+
+- uni0326
+
+- uni0327
+
+- uni0328
+</code></pre>
+ [code: unattached-dotted-circle-marks]
 
 
 
@@ -630,20 +529,16 @@ u1BC9D (U+1BC9D)</p>
 
 
 
-* ⚠️ **WARN** <p>The most common width is 654 among a set of 1 math glyphs.
+* ⚠️ **WARN** <p>The most common width is 1131 among a set of 2 math glyphs.
 The following math glyphs have a different width, though:</p>
-<p>Width = 1131:
-less</p>
+<p>Width = 654:
+plus</p>
 <p>Width = 740:
 equal</p>
-<p>Width = 1130:
-greater</p>
-<p>Width = 593:
+<p>Width = 592:
 multiply</p>
 <p>Width = 572:
-divide</p>
-<p>Width = 322:
-minus</p>
+minus, divide</p>
  [code: width-outliers]
 
 
@@ -652,7 +547,7 @@ minus</p>
 </details>
 
 <details>
-    <summary>⚠️ <b>WARN</b> Checking with ots-sanitize. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/universal.html#"></a></summary>
+    <summary>⚠️ <b>WARN</b> Checking with ots-sanitize. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/universal.sanitize.html#"></a></summary>
     <div>
 
 
@@ -672,7 +567,7 @@ WARNING: Layout: tags aren't arranged alphabetically.</p>
 </details>
 
 <details>
-    <summary>⚠️ <b>WARN</b> Check font contains no unreachable glyphs <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/universal.html#"></a></summary>
+    <summary>⚠️ <b>WARN</b> Check font contains no unreachable glyphs <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/universal.glyphset.html#"></a></summary>
     <div>
 
 
@@ -682,9 +577,9 @@ WARNING: Layout: tags aren't arranged alphabetically.</p>
 
 
 * ⚠️ **WARN** <p>The following glyphs could not be reached by codepoint or substitution rules:</p>
-<pre><code>- glyph10240
+<pre><code>- glyph11529
 
-- glyph10336
+- glyph11625
 </code></pre>
  [code: unreachable-glyphs]
 
@@ -694,7 +589,7 @@ WARNING: Layout: tags aren't arranged alphabetically.</p>
 </details>
 
 <details>
-    <summary>⚠️ <b>WARN</b> Do outlines contain any jaggy segments? <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/outline.html#"></a></summary>
+    <summary>⚠️ <b>WARN</b> Validate size, and resolution of article images, and ensure article page has minimum length and includes visual assets. <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/googlefonts.article.html#"></a></summary>
     <div>
 
 
@@ -703,53 +598,8 @@ WARNING: Layout: tags aren't arranged alphabetically.</p>
 
 
 
-* ⚠️ **WARN** <p>The following glyphs have jaggy segments:</p>
-<pre><code>* glyph00596: B&lt;&lt;210.0,355.5&gt;-&lt;210.0,358.0&gt;-&lt;211.0,359.0&gt;&gt;/B&lt;&lt;211.0,359.0&gt;-&lt;181.0,333.0&gt;-&lt;167.5,296.5&gt;&gt; = 4.085616779974888
-
-* glyph01008: B&lt;&lt;472.5,296.5&gt;-&lt;459.0,333.0&gt;-&lt;429.0,359.0&gt;&gt;/B&lt;&lt;429.0,359.0&gt;-&lt;430.0,358.0&gt;-&lt;430.0,355.5&gt;&gt; = 4.085616779974888
-</code></pre>
- [code: found-jaggy-segments]
-
-
-
-</div>
-</details>
-
-<details>
-    <summary>⚠️ <b>WARN</b> Check the direction of the outermost contour in each glyph <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/outline.html#"></a></summary>
-    <div>
-
-
-
-
-
-
-
-* ⚠️ **WARN** <p>The following glyphs have a counter-clockwise outer contour:</p>
-<pre><code>* degree (U+00B0) has a counter-clockwise outer contour
-
-* eight (U+0038) has a counter-clockwise outer contour
-
-* glyph00193 has a counter-clockwise outer contour
-
-* glyph00194 has a counter-clockwise outer contour
-
-* glyph00195 has a counter-clockwise outer contour
-
-* glyph00196 has a counter-clockwise outer contour
-
-* glyph00199 has a counter-clockwise outer contour
-
-* glyph00209 has a counter-clockwise outer contour
-
-* glyph00210 has a counter-clockwise outer contour
-
-* glyph00211 has a counter-clockwise outer contour
-
-* 2274 more.
-</code></pre>
-<p>Use -F or --full-lists to disable shortening of long lists.</p>
- [code: ccw-outer-contour]
+* ⚠️ **WARN** <p>Family metadata at fonts/NotoSansDuployan/googlefonts/ttf does not have an article.</p>
+ [code: lacks-article]
 
 
 
@@ -772,21 +622,84 @@ be served. You can solve this by either manually adding additional
 subset declarations to METADATA.pb, or by editing the glyphset
 definitions.</p>
 <ul>
-<li>U+02C7 CARON: try adding one of: tifinagh, yi, canadian-aboriginal</li>
+<li>U+02C7 CARON: try adding one of: yi, tifinagh, canadian-aboriginal</li>
 <li>U+02D8 BREVE: try adding one of: yi, canadian-aboriginal</li>
 <li>U+02D9 DOT ABOVE: try adding one of: yi, canadian-aboriginal</li>
 <li>U+02DB OGONEK: try adding one of: yi, canadian-aboriginal</li>
 <li>U+02DD DOUBLE ACUTE ACCENT: not included in any glyphset definition</li>
-<li>U+0302 COMBINING CIRCUMFLEX ACCENT: try adding one of: tifinagh, coptic, cherokee, math</li>
+<li>U+0302 COMBINING CIRCUMFLEX ACCENT: try adding one of: coptic, math, tifinagh, cherokee</li>
 <li>U+0306 COMBINING BREVE: try adding one of: old-permic, tifinagh</li>
-<li>U+0307 COMBINING DOT ABOVE: try adding one of: old-permic, math, canadian-aboriginal, tai-le, tifinagh, syriac, malayalam, coptic</li>
+<li>U+0307 COMBINING DOT ABOVE: try adding one of: old-permic, tifinagh, coptic, syriac, math, malayalam, tai-le, canadian-aboriginal</li>
 <li>U+030A COMBINING RING ABOVE: try adding syriac</li>
-<li>U+030B COMBINING DOUBLE ACUTE ACCENT: try adding one of: cherokee, osage
-20 more.</li>
+<li>U+030B COMBINING DOUBLE ACUTE ACCENT: try adding one of: osage, cherokee
+22 more.</li>
 </ul>
 <p>Use -F or --full-lists to disable shortening of long lists.</p>
 <p>Or you can add the above codepoints to one of the subsets supported by the font: <code>duployan</code>, <code>latin</code>, <code>latin-ext</code></p>
  [code: unreachable-subsetting]
+
+
+
+</div>
+</details>
+
+<details>
+    <summary>⚠️ <b>WARN</b> Do any segments have colinear vectors? <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/outline.html#"></a></summary>
+    <div>
+
+
+
+
+
+
+
+* ⚠️ **WARN** <p>The following glyphs have colinear vectors:</p>
+<pre><code>* dollar (U+0024): L&lt;&lt;307.0,399.0&gt;--&lt;331.0,396.0&gt;&gt; -&gt; L&lt;&lt;331.0,396.0&gt;--&lt;387.0,391.0&gt;&gt;
+
+* dollar (U+0024): L&lt;&lt;381.0,320.0&gt;--&lt;325.0,325.0&gt;&gt; -&gt; L&lt;&lt;325.0,325.0&gt;--&lt;307.0,328.0&gt;&gt;
+</code></pre>
+ [code: found-colinear-vectors]
+
+
+
+</div>
+</details>
+
+<details>
+    <summary>⚠️ <b>WARN</b> Do outlines contain any jaggy segments? <a href="https://fontbakery.readthedocs.io/en/stable/fontbakery/checks/outline.html#"></a></summary>
+    <div>
+
+
+
+
+
+
+
+* ⚠️ **WARN** <p>The following glyphs have jaggy segments:</p>
+<pre><code>* glyph01763: B&lt;&lt;352.5,115.5&gt;-&lt;320.0,85.0&gt;-&lt;272.0,77.0&gt;&gt;/L&lt;&lt;272.0,77.0&gt;--&lt;272.0,77.0&gt;&gt; = 9.462322208025613
+
+* glyph02256: B&lt;&lt;288.5,120.0&gt;-&lt;260.0,101.0&gt;-&lt;225.0,100.0&gt;&gt;/L&lt;&lt;225.0,100.0&gt;--&lt;225.0,100.0&gt;&gt; = 1.6365770416166923
+
+* glyph06469: B&lt;&lt;287.5,17.0&gt;-&lt;207.0,-9.0&gt;-&lt;151.0,4.0&gt;&gt;/L&lt;&lt;151.0,4.0&gt;--&lt;151.0,4.0&gt;&gt; = 13.069317896282163
+
+* glyph06469: L&lt;&lt;151.0,4.0&gt;--&lt;151.0,4.0&gt;&gt;/B&lt;&lt;151.0,4.0&gt;-&lt;109.0,14.0&gt;-&lt;95.5,37.5&gt;&gt; = 13.392497753751098
+
+* glyph07676: L&lt;&lt;135.0,88.0&gt;--&lt;135.0,88.0&gt;&gt;/B&lt;&lt;135.0,88.0&gt;-&lt;106.0,93.0&gt;-&lt;95.0,113.5&gt;&gt; = 9.782407031807285
+
+* glyph07676: L&lt;&lt;627.0,1.0&gt;--&lt;135.0,88.0&gt;&gt;/L&lt;&lt;135.0,88.0&gt;--&lt;135.0,88.0&gt;&gt; = 10.027908767424819
+
+* glyph09167: L&lt;&lt;115.0,30.0&gt;--&lt;115.0,30.0&gt;&gt;/B&lt;&lt;115.0,30.0&gt;-&lt;99.0,32.0&gt;-&lt;91.5,43.5&gt;&gt; = 7.125016348901757
+
+* glyph09167: L&lt;&lt;338.0,0.0&gt;--&lt;115.0,30.0&gt;&gt;/L&lt;&lt;115.0,30.0&gt;--&lt;115.0,30.0&gt;&gt; = 7.6619511549722334
+
+* glyph09168: L&lt;&lt;115.0,30.0&gt;--&lt;115.0,30.0&gt;&gt;/B&lt;&lt;115.0,30.0&gt;-&lt;99.0,32.0&gt;-&lt;91.5,43.5&gt;&gt; = 7.125016348901757
+
+* glyph09168: L&lt;&lt;145.0,253.0&gt;--&lt;145.0,253.0&gt;&gt;/B&lt;&lt;145.0,253.0&gt;-&lt;129.0,255.0&gt;-&lt;121.5,266.5&gt;&gt; = 7.125016348901757
+
+* 26 more.
+</code></pre>
+<p>Use -F or --full-lists to disable shortening of long lists.</p>
+ [code: found-jaggy-segments]
 
 
 
@@ -803,7 +716,7 @@ definitions.</p>
 
 
 
-* ⚠️ **WARN** <p>Font file is 1.7Mb; ideally it should be less than 1.0Mb</p>
+* ⚠️ **WARN** <p>Font file is 1.8Mb; ideally it should be less than 1.0Mb</p>
  [code: large-font]
 
 
@@ -838,8 +751,8 @@ definitions.</p>
 
 | 💥 ERROR | ☠ FATAL | 🔥 FAIL | ⚠️ WARN | ⏩ SKIP | ℹ️ INFO | ✅ PASS | 🔎 DEBUG | 
 | ---|---|---|---|---|---|---|---|
-| 0 | 0 | 4 | 27 | 237 | 13 | 203 | 0 | 
-| 0% | 0% | 1% | 6% | 49% | 3% | 42% | 0% | 
+| 0 | 0 | 4 | 25 | 241 | 13 | 201 | 0 | 
+| 0% | 0% | 1% | 5% | 50% | 3% | 42% | 0% | 
 
 
 

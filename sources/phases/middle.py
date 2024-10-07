@@ -1,4 +1,5 @@
 # Copyright 2021 Google LLC
+# Copyright 2023-2024 David Corbett
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,11 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__all__ = [
-    'PHASE_LIST',
-    'merge_lookalikes',
-]
+from __future__ import annotations
 
+from typing import TYPE_CHECKING
 
 from . import Lookup
 from . import Rule
@@ -24,10 +23,27 @@ from schema import Schema
 import sifting
 
 
-def merge_lookalikes(builder, original_schemas, schemas, new_schemas, classes, named_lookups, add_rule):
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from . import AddRule
+    from . import FreezableList
+    from duployan import Builder
+    from utils import OrderedSet
+    from utils import PrefixView
+
+
+def merge_lookalikes(
+    builder: Builder,
+    original_schemas: OrderedSet[Schema],
+    schemas: OrderedSet[Schema],
+    new_schemas: OrderedSet[Schema],
+    classes: PrefixView[FreezableList[Schema]],
+    named_lookups: PrefixView[Lookup],
+    add_rule: AddRule,
+) -> Sequence[Lookup]:
     lookup = Lookup(
         'rlig',
-        {'DFLT', 'dupl'},
         'dflt',
     )
     grouper = sifting.group_schemas(new_schemas)

@@ -3,3 +3,6 @@ drawbot-skia>=0.4.8
 sh>=1.14.2
 bumpfontversion
 chevron
+fonttools==4.53.1
+gfsubsets==2024.5.9
+uharfbuzz==0.37.2

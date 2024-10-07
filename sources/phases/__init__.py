@@ -1,4 +1,4 @@
-# Copyright 2018-2019, 2022-2023 David Corbett
+# Copyright 2018-2019, 2022-2024 David Corbett
 # Copyright 2020-2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,8 +24,7 @@ A phase is run iteratively until its output is stable. That means the
 output schemas of one iteration may be the input schemas of the next
 iteration. See `run_phases` for what stability entails.
 
-The parameters of a phase are as follows, though the specific parameter
-names don’t matter.
+The parameters of a phase are as follows.
 
 1. ``builder``: A ``Builder``.
 
@@ -86,54 +85,49 @@ modules in this package.
 
 from __future__ import annotations
 
-
-__all__ = [
-    'CHILD_EDGE_CLASSES',
-    'CONTINUING_OVERLAP_CLASS',
-    'CONTINUING_OVERLAP_OR_HUB_CLASS',
-    'HUB_CLASS',
-    'INTER_EDGE_CLASSES',
-    'Lookup',
-    'PARENT_EDGE_CLASS',
-    'Rule',
-    'run_phases',
-]
-
-
 import collections
-from collections.abc import Collection
-from collections.abc import Mapping
-from collections.abc import MutableMapping
-from collections.abc import MutableSequence
-from collections.abc import MutableSet
-from collections.abc import Sequence
-import itertools
 import functools
-from typing import Any
-from typing import ClassVar
+import itertools
 from typing import Final
 from typing import Generic
-from typing import Iterable
-from typing import Iterator
-from typing import Optional
-from typing import Set
-from typing import Tuple
+from typing import TYPE_CHECKING
 from typing import TypeVar
-from typing import Union
 from typing import cast
 from typing import overload
 
-
 import fontTools.feaLib.ast
 import fontTools.otlLib.builder
-
+from typing_extensions import override
 
 import schema
 from utils import GlyphClass
+from utils import KNOWN_FEATURES
+from utils import KNOWN_SCRIPTS
+from utils import KNOWN_SHAPE_PLANS
 from utils import MAX_TREE_DEPTH
 from utils import MAX_TREE_WIDTH
 from utils import OrderedSet
 from utils import PrefixView
+from utils import REQUIRED_FEATURES
+from utils import SUBSET_FEATURES
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from collections.abc import Iterable
+    from collections.abc import Mapping
+    from collections.abc import MutableMapping
+    from collections.abc import MutableSequence
+    from collections.abc import MutableSet
+    from collections.abc import Sequence
+    from collections.abc import Set as AbstractSet
+    from typing import Self
+    from typing import SupportsIndex
+
+    from _typeshed import SupportsRichComparison
+    from mypy_extensions import Arg
+
+    from duployan import Builder
 
 
 # TODO: Document the edge class name constants better with reference to
@@ -151,7 +145,10 @@ CHILD_EDGE_CLASSES: Final[Sequence[str]] = [f'global..ce{child_index + 1}' for c
 
 #: A list of lists of the names of glyph classes connecting child edges
 #: with parent edges while ignoring other marks.
-INTER_EDGE_CLASSES: Final[Sequence[Sequence[str]]] = [[f'global..edge{layer_index}_{child_index + 1}' for child_index in range(MAX_TREE_WIDTH)] for layer_index in range(MAX_TREE_DEPTH)]
+INTER_EDGE_CLASSES: Final[Sequence[Sequence[str]]] = [
+    [f'global..edge{layer_index}_{child_index + 1}' for child_index in range(MAX_TREE_WIDTH)]
+    for layer_index in range(MAX_TREE_DEPTH)
+]
 
 
 #: The name of the glyph class containing all valid continuing overlaps.
@@ -170,68 +167,121 @@ CONTINUING_OVERLAP_OR_HUB_CLASS: Final[str] = 'global..cont_or_hub'
 _T = TypeVar('_T')
 
 
-class _FreezableList(Generic[_T], Collection[_T]):
+class FreezableList(list[_T], Generic[_T]):
     """A list that can be frozen, making it immutable.
-
-    This is not a `list` in the Python sense, but it is analogous.
     """
 
-    def __init__(self) -> None:
-        self._delegate: Sequence[_T] = []
+    def __init__(self, iterable: Sequence[_T] = (), /) -> None:
+        super().__init__(iterable)
+        self._frozen: bool = False
 
     def freeze(self) -> None:
         """Makes this list immutable.
         """
-        self._delegate = tuple(self._delegate)
+        self._frozen = True
 
-    def __contains__(self, key: object, /) -> bool:
-        """Returns whether this list contains an object.
+    @override
+    def __delitem__(self, index: SupportsIndex | slice, /) -> None:
+        """Deletes the element(s) at an index or range of indices.
 
         Args:
-            key: An object to search for.
-        """
-        return key in self._delegate
+            index: The index, or range of indices, of the element(s) to
+                delete.
 
-    def __iter__(self) -> Iterator[_T]:
-        """Returns an iterator over this list.
+        Raises:
+            IndexError: If `index` is out of range.
+            ValueError: If this list is frozen.
         """
-        return iter(self._delegate)
+        if self._frozen:
+            raise ValueError('Modifying a frozen list')
+        super().__delitem__(index)
 
-    def __len__(self) -> int:
-        """Returns the length of this list.
+    @overload
+    def __setitem__(self, index: SupportsIndex, value: _T, /) -> None:
+        ...
+
+    @overload
+    def __setitem__(self, index: slice, value: Iterable[_T], /) -> None:
+        ...
+
+    @override
+    def __setitem__(self, index: SupportsIndex | slice, value: _T | Iterable[_T], /) -> None:
+        """Sets the element(s) at an index or range of indices.
+
+        Args:
+            index: The index, or range of indices, of the element(s) to
+                set.
+            value: The new value(s) of the element(s) at `index`.
+
+        Raises:
+            IndexError: If the index is out of range.
+            ValueError: If this list is frozen.
         """
-        return len(self._delegate)
+        if self._frozen:
+            raise ValueError('Modifying a frozen list')
+        super().__setitem__(index, value)  # type: ignore[assignment, index]
 
-    def insert(self, index: int, object: _T, /) -> None:
+    @override
+    def insert(self, index: SupportsIndex, value: _T, /) -> None:
         """Inserts something into this list.
 
         Args:
-            index: The index to insert `object` at in the same manner
-                as `list.insert`.
-            object: The element to insert.
+            index: The index to insert `value` at in the same manner as
+                `list.insert`.
+            value: The element to insert.
 
         Raises:
             ValueError: If this list is frozen.
         """
-        if isinstance(self._delegate, MutableSequence):
-            self._delegate.insert(index, object)
-        else:
-            raise ValueError('Inserting into a frozen list') from None
+        if self._frozen:
+            raise ValueError('Modifying a frozen list')
+        super().insert(index, value)
 
-    def append(self, object: _T, /) -> None:
+    @override
+    def append(self, value: _T, /) -> None:
         """Appends something to this list.
 
         Args:
-            object: The element to append.
+            value: The element to append.
 
         Raises:
             ValueError: If this list is frozen.
         """
-        if isinstance(self._delegate, MutableSequence):
-            self._delegate.append(object)
-        else:
-            raise ValueError('Appending to a frozen list') from None
+        if self._frozen:
+            raise ValueError('Modifying a frozen list')
+        super().append(value)
 
+    @override
+    def clear(self, /) -> None:
+        """Removes all elements from this list.
+
+        Raises:
+            ValueError: If this list is frozen.
+        """
+        if self._frozen:
+            raise ValueError('Modifying a frozen list')
+        super().clear()
+
+    @override
+    def __iadd__(self, iterable: Iterable[_T], /) -> Self:  # type: ignore[override]
+        """Extends this list.
+
+        Args:
+            iterable: The iterable containing the elements to append to
+                this list.
+
+        Returns:
+            This list.
+
+        Raises:
+            ValueError: If this list is frozen.
+        """
+        if self._frozen:
+            raise ValueError('Modifying a frozen list')
+        super().__iadd__(iterable)
+        return self
+
+    @override
     def extend(self, iterable: Iterable[_T], /) -> None:
         """Extends this list.
 
@@ -242,10 +292,82 @@ class _FreezableList(Generic[_T], Collection[_T]):
         Raises:
             ValueError: If this list is frozen.
         """
-        if isinstance(self._delegate, MutableSequence):
-            self._delegate.extend(iterable)
-        else:
-            raise ValueError('Extending a frozen list') from None
+        if self._frozen:
+            raise ValueError('Modifying a frozen list')
+        super().extend(iterable)
+
+    @override
+    def __imul__(self, value: SupportsIndex, /) -> Self:
+        """Updates this list with its contents repeated.
+
+        Args:
+            value: How many times to repeat this list’s elements.
+
+        Returns:
+            This list.
+
+        Raises:
+            ValueError: If this list is frozen.
+        """
+        if self._frozen:
+            raise ValueError('Modifying a frozen list')
+        return super().__imul__(value)
+
+    @override
+    def pop(self, index: SupportsIndex = -1, /) -> _T:
+        """Returns the element at an index and removes it from this
+        list.
+
+        Args:
+            index: The index of the element to return.
+
+        Raises:
+            ValueError: If this list is frozen.
+        """
+        if self._frozen:
+            raise ValueError('Modifying a frozen list')
+        return super().pop(index)
+
+    @override
+    def remove(self, value: _T, /) -> None:
+        """Removes an element from this list.
+
+        Args:
+            value: The element to remove.
+
+        Raises:
+            ValueError: If this list is frozen.
+        """
+        if self._frozen:
+            raise ValueError('Modifying a frozen list')
+        super().remove(value)
+
+    @override
+    def reverse(self) -> None:
+        """Reverses this list in place.
+
+        Raises:
+            ValueError: If this list is frozen.
+        """
+        if self._frozen:
+            raise ValueError('Modifying a frozen list')
+        super().reverse()
+
+    @override
+    def sort(self, /, *, key: Callable[[_T], SupportsRichComparison] | None = None, reverse: bool = False) -> None:
+        """Sorts this list in place.
+
+        Args:
+            key: A function to apply to each element to get its sort
+                key, or ``None`` for the identity function.
+            reverse: Whether to sort in descending order.
+
+        Raises:
+            ValueError: If this list is frozen.
+        """
+        if self._frozen:
+            raise ValueError('Modifying a frozen list')
+        super().sort(key=key, reverse=reverse)
 
 
 class Rule:
@@ -284,8 +406,8 @@ class Rule:
     @overload
     def __init__(
         self,
-        a1: Union[str, Sequence[Union[schema.Schema, str]]],
-        a2: Union[str, Sequence[Union[schema.Schema, str]]],
+        a1: str | Sequence[schema.Schema | str],
+        a2: str | Sequence[schema.Schema | str],
         /,
     ) -> None:
         ...
@@ -293,10 +415,10 @@ class Rule:
     @overload
     def __init__(
         self,
-        a1: Union[str, Sequence[Union[schema.Schema, str]]],
-        a2: Union[str, Sequence[Union[schema.Schema, str]]],
-        a3: Union[str, Sequence[Union[schema.Schema, str]]],
-        a4: Union[str, Sequence[Union[schema.Schema, str]]],
+        a1: str | Sequence[schema.Schema | str],
+        a2: str | Sequence[schema.Schema | str],
+        a3: str | Sequence[schema.Schema | str],
+        a4: str | Sequence[schema.Schema | str],
         /,
     ) -> None:
         ...
@@ -304,51 +426,51 @@ class Rule:
     @overload
     def __init__(
         self,
-        a1: Union[str, Sequence[Union[schema.Schema, str]]],
-        a2: Union[str, Sequence[Union[schema.Schema, str]]],
-        a3: Optional[Union[str, Sequence[Union[schema.Schema, str]]]],
+        a1: str | Sequence[schema.Schema | str],
+        a2: str | Sequence[schema.Schema | str],
+        a3: str | Sequence[schema.Schema | str] | None,
         /,
         *,
-        lookups: Sequence[Optional[str]],
+        lookups: Sequence[str | None],
     ) -> None:
         ...
 
     @overload
     def __init__(
         self,
-        a1: Union[str, Sequence[Union[schema.Schema, str]]],
-        a2: Union[str, Sequence[Union[schema.Schema, str]]],
-        a3: Optional[Union[str, Sequence[Union[schema.Schema, str]]]],
+        a1: str | Sequence[schema.Schema | str],
+        a2: str | Sequence[schema.Schema | str],
+        a3: str | Sequence[schema.Schema | str] | None,
         /,
         *,
-        x_placements: Sequence[Optional[float]],
-        x_advances: Optional[Sequence[Optional[float]]],
+        x_placements: Sequence[float | None],
+        x_advances: Sequence[float | None] | None = ...,
     ) -> None:
         ...
 
     @overload
     def __init__(
         self,
-        a1: Union[str, Sequence[Union[schema.Schema, str]]],
-        a2: Union[str, Sequence[Union[schema.Schema, str]]],
-        a3: Optional[Union[str, Sequence[Union[schema.Schema, str]]]],
+        a1: str | Sequence[schema.Schema | str],
+        a2: str | Sequence[schema.Schema | str],
+        a3: str | Sequence[schema.Schema | str] | None,
         /,
         *,
-        x_advances: Sequence[Optional[float]],
+        x_advances: Sequence[float | None],
     ) -> None:
         ...
 
     def __init__(
         self,
-        a1: Union[str, Sequence[Union[schema.Schema, str]]],
-        a2: Union[str, Sequence[Union[schema.Schema, str]]],
-        a3: Optional[Union[str, Sequence[Union[schema.Schema, str]]]] = None,
-        a4: Optional[Union[str, Sequence[Union[schema.Schema, str]]]] = None,
+        a1: str | Sequence[schema.Schema | str],
+        a2: str | Sequence[schema.Schema | str],
+        a3: str | Sequence[schema.Schema | str] | None = None,
+        a4: str | Sequence[schema.Schema | str] | None = None,
         /,
         *,
-        lookups: Optional[Sequence[Optional[str]]] = None,
-        x_placements: Optional[Sequence[Optional[float]]] = None,
-        x_advances: Optional[Sequence[Optional[float]]] = None,
+        lookups: Sequence[str | None] | None = None,
+        x_placements: Sequence[float | None] | None = None,
+        x_advances: Sequence[float | None] | None = None,
     ) -> None:
         """Initializes this `Rule`.
 
@@ -378,10 +500,10 @@ class Rule:
             ...
 
         @overload
-        def _l(glyphs: Union[str, Sequence[Union[schema.Schema, str]]]) -> Sequence[Union[schema.Schema, str]]:
+        def _l(glyphs: str | Sequence[schema.Schema | str]) -> Sequence[schema.Schema | str]:
             ...
 
-        def _l(glyphs: Optional[Union[str, Sequence[Union[schema.Schema, str]]]]) -> Optional[Sequence[Union[schema.Schema, str]]]:
+        def _l(glyphs: str | Sequence[schema.Schema | str] | None) -> Sequence[schema.Schema | str] | None:
             return [glyphs] if isinstance(glyphs, str) else glyphs
 
         if a4 is None and lookups is None and x_advances is None:
@@ -392,22 +514,19 @@ class Rule:
             a3 = []
         assert (a4 is not None) + (lookups is not None) + (x_placements is not None or x_advances is not None) == 1, (
             'Rule can take exactly one of an output glyph/class list, a lookup list, or a position list')
-        self.contexts_in = _l(a1)
-        self.inputs = _l(a2)
-        self.contexts_out = _l(a3)
-        self.outputs = None
-        self.lookups = lookups
-        self.x_placements = x_placements
-        self.x_advances = x_advances
+        self.contexts_in: Final = _l(a1)
+        self.inputs: Final = _l(a2)
+        self.contexts_out: Final = _l(a3)
+        self.outputs: Final = _l(a4)
+        self.lookups: Final = lookups
+        self.x_placements: Final = x_placements
+        self.x_advances: Final = x_advances
         if lookups is not None:
             assert len(lookups) == len(self.inputs), f'There must be one lookup (or None) per input glyph ({len(lookups)} != {len(self.inputs)})'
-        elif a4 is not None:
-            self.outputs = _l(a4)
-        else:
-            if x_placements is not None:
-                assert len(x_placements) == len(self.inputs), f'There must be one x placement (or None) per input glyph ({len(x_placements)} != {len(self.inputs)})'
-            if x_advances is not None:
-                assert len(x_advances) == len(self.inputs), f'There must be one x advance (or None) per input glyph ({len(x_advances)} != {len(self.inputs)})'
+        if x_placements is not None:
+            assert len(x_placements) == len(self.inputs), f'There must be one x placement (or None) per input glyph ({len(x_placements)} != {len(self.inputs)})'
+        if x_advances is not None:
+            assert len(x_advances) == len(self.inputs), f'There must be one x advance (or None) per input glyph ({len(x_advances)} != {len(self.inputs)})'
 
     def to_asts(
         self,
@@ -423,8 +542,19 @@ class Rule:
         it may desugar to multiple statement ASTs if FEA syntax is
         missing a necessary feature.
 
-        ..
-            TODO: Document that syntactic sugar.
+        The only such missing feature is for a class in a ligature
+        substitution’s output that is the same length as the only class
+        in the input. If FEA supported it, an example would be::
+
+            @INPUT = [i j];
+            @OUTPUT = [f_i f_j];
+            sub f @INPUT by @OUTPUT;
+
+        This is desugared by unrolling all uses of the classes in
+        parallel. For example::
+
+            sub f i by f_i;
+            sub f j by f_j;
 
         Args:
             class_asts: A map to glyph classes from their names.
@@ -444,38 +574,16 @@ class Rule:
             rule.
         """
         def glyph_to_ast(
-            glyph: Union[str, schema.Schema],
-            unrolling_index: Optional[int] = None,
-        ) -> Union[fontTools.feaLib.ast.GlyphClassName, fontTools.feaLib.ast.GlyphName]:
+            glyph: str | schema.Schema,
+        ) -> fontTools.feaLib.ast.GlyphClassName | fontTools.feaLib.ast.GlyphName:
             if isinstance(glyph, str):
-                if unrolling_index is not None:
-                    return fontTools.feaLib.ast.GlyphName(class_asts[glyph].glyphs.glyphs[unrolling_index])
-                else:
-                    return fontTools.feaLib.ast.GlyphClassName(class_asts[glyph])
+                return fontTools.feaLib.ast.GlyphClassName(class_asts[glyph])
             return fontTools.feaLib.ast.GlyphName(str(glyph))
 
         def glyphs_to_ast(
-            glyphs: Iterable[Union[str, schema.Schema]],
-            unrolling_index: Optional[int] = None,
-        ) -> Sequence[Union[fontTools.feaLib.ast.GlyphClassName, fontTools.feaLib.ast.GlyphName]]:
-            return [glyph_to_ast(glyph, unrolling_index) for glyph in glyphs]
-
-        def glyph_to_name(
-            glyph: Union[str, schema.Schema],
-            unrolling_index: Optional[int] = None,
-        ) -> str:
-            if isinstance(glyph, str):
-                if unrolling_index is not None:
-                    return cast(Sequence[str], class_asts[glyph].glyphs.glyphs)[unrolling_index]
-                else:
-                    assert not isinstance(glyph, str), f'Glyph classes are not allowed where only glyphs are expected: @{glyph}'
-            return str(glyph)
-
-        def glyphs_to_names(
-            glyphs: Iterable[Union[str, schema.Schema]],
-            unrolling_index: Optional[int] = None,
-        ) -> Sequence[str]:
-            return [glyph_to_name(glyph, unrolling_index) for glyph in glyphs]
+            glyphs: Iterable[str | schema.Schema],
+        ) -> Sequence[fontTools.feaLib.ast.GlyphClassName | fontTools.feaLib.ast.GlyphName]:
+            return [glyph_to_ast(glyph) for glyph in glyphs]
 
         if self.lookups is not None:
             assert not in_reverse_lookup, 'Reverse chaining contextual substitutions do not support lookup references'
@@ -527,28 +635,13 @@ class Rule:
                     )]
             else:
                 assert not in_reverse_lookup, 'Reverse chaining contextual substitutions only support single substitutions'
-                input = self.inputs[0]
-                if isinstance(input, str) and (not self.outputs or any(isinstance(output, str) for output in self.outputs)):
-                    # Allow classes in multiple substitution output by unrolling all uses of
-                    # the class in parallel with the input class.
-                    asts = []
-                    for i, glyph_name in enumerate(class_asts[input].glyphs.glyphs):
-                        asts.append(fontTools.feaLib.ast.MultipleSubstStatement(
-                            glyphs_to_ast(self.contexts_in),
-                            glyph_name,
-                            glyphs_to_ast(self.contexts_out),
-                            glyphs_to_names(self.outputs, i),
-                            in_contextual_lookup,
-                        ))
-                    return asts
-                else:
-                    return [fontTools.feaLib.ast.MultipleSubstStatement(
-                        glyphs_to_ast(self.contexts_in),
-                        glyph_to_name(input),
-                        glyphs_to_ast(self.contexts_out),
-                        glyphs_to_names(self.outputs),
-                        in_contextual_lookup,
-                    )]
+                return [fontTools.feaLib.ast.MultipleSubstStatement(
+                    glyphs_to_ast(self.contexts_in),
+                    glyph_to_ast(self.inputs[0]),
+                    glyphs_to_ast(self.contexts_out),
+                    glyphs_to_ast(self.outputs),
+                    in_contextual_lookup,
+                )]
         else:
             assert not in_reverse_lookup, 'Reverse chaining contextual substitutions only support single substitutions'
             assert self.outputs is not None
@@ -578,7 +671,7 @@ class Rule:
                             *glyphs_to_ast(self.inputs[input_class_index + 1:]),
                         ],
                         glyphs_to_ast(self.contexts_out),
-                        glyph_to_name(fontTools.feaLib.ast.GlyphName(output_glyph_name)),
+                        output_glyph_name,
                         in_contextual_lookup,
                     ))
                 return asts
@@ -587,7 +680,7 @@ class Rule:
                     glyphs_to_ast(self.contexts_in),
                     glyphs_to_ast(self.inputs),
                     glyphs_to_ast(self.contexts_out),
-                    glyph_to_name(output),
+                    str(output),
                     in_contextual_lookup,
                 )]
 
@@ -602,197 +695,199 @@ class Rule:
         """
         return len(self.inputs) == 1 and self.outputs is not None and len(self.outputs) != 1
 
+    def get_scripts(
+        self,
+        classes: Mapping[str, Sequence[schema.Schema]],
+    ) -> AbstractSet[str]:
+        """Returns the minimal set of script tags relevant to this rule.
+
+        Args:
+            classes: A mapping to glyph classes from their names.
+        """
+        def s_to_scripts(
+            s: schema.Schema | str,
+        ) -> AbstractSet[str]:
+            if isinstance(s, str):
+                scripts = set()
+                for s_schema in classes[s]:
+                    scripts |= s_schema.scripts
+                return scripts
+            return s.scripts
+
+        def target_to_scripts(
+            target: Sequence[schema.Schema | str] | None,
+        ) -> AbstractSet[str]:
+            scripts = set(KNOWN_SCRIPTS)
+            if target:
+                for s in target:
+                    scripts &= s_to_scripts(s)
+            return scripts
+
+        return (target_to_scripts(self.contexts_in)
+            & target_to_scripts(self.inputs)
+            & target_to_scripts(self.contexts_out)
+        )
+
 
 class Lookup:
     """An OpenType Layout lookup.
 
-    If `feature` and `language` are ``None`` and ``scripts`` is empty,
-    this is a named lookup. Otherwise, it is an anonymous lookup
-    directly associated with a feature.
-
-    Class attributes:
-        KNOWN_SCRIPTS: The list of scripts that this class can handle.
+    If `feature` and `language` are ``None``, this is a named lookup.
+    Otherwise, it is an anonymous lookup directly associated with a
+    feature.
 
     Attributes:
         feature: This lookup’s feature tag, if anonymous.
-        scripts: This lookup’s script tags. A named lookup has an empty
-            script tag list.
+        language: This lookup’s language system tag, if anonymous.
+        flags: The lookup flags.
+        mark_filtering_set: The name of the glyph class used for the
+            mark filtering set, if any.
         required: Whether the shaper is guaranteed to apply this lookup,
             regardless of which script the itemizer chooses. This
             ignores the fact that it is technically possible to disable
             any feature; there are some features that are not *meant* to
             be disabled.
-        language: This lookup’s language system tag, if anonymous.
-        flags: The lookup flags.
-        mark_filtering_set: The name of the glyph class used for the
-            mark filtering set, if any.
-        reversed: Whether this lookup is reversed. (The only reversed
-            lookup type is the reverse chaining contextual single
-            substitution, but this would cover other reversed lookup
-            types if they existed.)
-        prepending: Whether new rules should be added to the beginning
-            instead of the end.
+        reverse: Whether this lookup is applied in reverse order. (The
+            only reverse lookup type is the reverse chaining contextual
+            single substitution, but this would cover other reverse
+            lookup types if they existed.)
         rules: The list of rules.
     """
-
-    _DISCRETIONARY_FEATURES: ClassVar[Set[str]] = {
-        'afrc',
-        'calt',
-        'clig',
-        'cswh',
-        *{f'cv{x:02}' for x in range(1, 100)},
-        'dlig',
-        'hist',
-        'hlig',
-        'kern',
-        'liga',
-        'lnum',
-        'onum',
-        'ordn',
-        'pnum',
-        'salt',
-        'sinf',
-        *{f'ss{x:02}' for x in range(1, 21)},
-        'subs',
-        'sups',
-        'swsh',
-        'titl',
-        'tnum',
-        'zero',
-    }
-
-    _REQUIRED_SCRIPT_FEATURES: ClassVar[Mapping[str, Set[str]]] = {
-        'DFLT': {
-            'abvm',
-            'blwm',
-            'curs',
-            'dist',
-            'locl',
-            'mark',
-            'mkmk',
-            'rclt',
-            'rlig',
-        },
-        'dupl': {
-            'abvm',
-            'abvs',
-            'blwm',
-            'blws',
-            'curs',
-            'dist',
-            'haln',
-            'mark',
-            'mkmk',
-            'pres',
-            'psts',
-            'rclt',
-            'rlig',
-        },
-    }
-
-    KNOWN_SCRIPTS: ClassVar[Iterable[str]] = sorted(_REQUIRED_SCRIPT_FEATURES)
 
     @overload
     def __init__(
             self,
             feature: str,
-            scripts: Union[str, Iterable[str]],
             language: str,
             *,
-            flags: int,
-            mark_filtering_set: Optional[str],
-            reversed: bool,
-            prepending: bool,
+            flags: int = ...,
+            mark_filtering_set: str | None = ...,
+            reverse: bool = ...,
     ) -> None:
         ...
 
     @overload
     def __init__(
             self,
-            feature: None,
-            scripts: None,
-            language: None,
+            feature: None = ...,
+            language: None = ...,
             *,
-            flags: int,
-            mark_filtering_set: Optional[str],
-            reversed: bool,
-            prepending: bool,
+            flags: int = ...,
+            mark_filtering_set: str | None = ...,
+            reverse: bool = ...,
     ) -> None:
         ...
 
     def __init__(
             self,
-            feature: Optional[str],
-            scripts: Optional[Union[str, Iterable[str]]],
-            language: Optional[str],
+            feature: str | None = None,
+            language: str | None = None,
             *,
             flags: int = 0,
-            mark_filtering_set: Optional[str] = None,
-            reversed: bool = False,
-            prepending: bool = False,
+            mark_filtering_set: str | None = None,
+            reverse: bool = False,
     ) -> None:
         """Initializes this `Lookup`.
 
         Args:
             feature: The ``feature`` attribute.
-            scripts: The ``scripts`` attribute, or ``None`` as a
-                shorthand for ``[]``.
             language: The ``language`` attribute.
             flags: The ``flags`` attribute, except that the
                 ``UseMarkFilteringSet`` flag must not be set, even if
                 there is a mark filtering set.
             mark_filtering_set: The ``mark_filtering_set`` attribute.
-            reversed: The ``reversed`` attribute.
-            prepending: The ``prepending`` attribute.
+            reverse: The ``reverse`` attribute.
         """
         assert flags & fontTools.otlLib.builder.LOOKUP_FLAG_USE_MARK_FILTERING_SET == 0, 'UseMarkFilteringSet is added automatically'
         assert mark_filtering_set is None or flags & fontTools.otlLib.builder.LOOKUP_FLAG_IGNORE_MARKS == 0, 'UseMarkFilteringSet is not useful with IgnoreMarks'
         if mark_filtering_set:
             flags |= fontTools.otlLib.builder.LOOKUP_FLAG_USE_MARK_FILTERING_SET
-        self.feature = feature
-        if scripts is not None:
-            scripts = [scripts] if isinstance(scripts, str) else sorted(scripts)
-            required_set = set()
-        else:
-            scripts = []
-            required_set = {False}
-        self.scripts: Iterable[str] = scripts
-        self.language = language
-        for script in self.scripts:
-            assert len(script) == 4, f"Script tag must be 4 characters long: '{script}'"
         assert language is None or len(language) == 4, f"Language tag must be 4 characters long: '{language}'"
         assert feature is None or len(feature) == 4, f"Feature tag must be 4 characters long: '{feature}'"
-        self.flags = flags
-        self.mark_filtering_set = mark_filtering_set
-        self.reversed = reversed
-        self.prepending = prepending
-        self.rules: _FreezableList[Rule] = _FreezableList()
-        assert (feature is None) == (not scripts) == (language is None), 'Not clear whether this is a named or a normal lookup'
-        for script in scripts:
-            if feature in self._DISCRETIONARY_FEATURES:
-                required = False
-            else:
-                try:
-                    script_features = self._REQUIRED_SCRIPT_FEATURES[script]
-                except KeyError:
-                    raise ValueError(f"Unrecognized script tag: '{script}'")
-                assert feature in script_features, f"The phase system does not support the feature '{feature}' for the script '{script}'"
-                required = True
-            required_set.add(required)
-        assert len(required_set) == 1, f"""Scripts {{{
-                ', '.join("'{script}'" for script in scripts)
-            }}} disagree about whether the feature '{feature}' is required"""
-        self.required: bool = next(iter(required_set))
+        assert (feature is None) == (language is None), 'Not clear whether this is a named or a normal lookup'
+        assert feature is None or feature in KNOWN_FEATURES
+        self.feature: Final = feature
+        self.language: Final = language
+        self.flags: Final = flags
+        self.mark_filtering_set: Final = mark_filtering_set
+        self.required: Final = feature in REQUIRED_FEATURES
+        self.reverse: Final = reverse
+        self.rules: Final[FreezableList[Rule]] = FreezableList()
+
+    def get_scripts(
+        self,
+        classes: Mapping[str, Sequence[schema.Schema]],
+    ) -> AbstractSet[str]:
+        """Returns the minimal set of script tags relevant to this
+        lookup.
+
+        Args:
+            classes: A mapping to glyph classes from their names.
+        """
+        scripts: MutableSet[str] = set()
+        for rule in self.rules:
+            scripts |= rule.get_scripts(classes)
+        return scripts
+
+    def _get_sorted_scripts(self, features_to_scripts: Mapping[str, AbstractSet[str]]) -> Iterable[str]:
+        """Returns the script tags to use for this lookup.
+
+        If this lookup is marked as required, this method validates that
+        all the returned scripts do in fact enable this lookup’s
+        feature.
+
+        Args:
+            features_to_scripts: A mapping from feature tags to sets of
+                script tags. The mapping must contain this lookup’s
+                feature tag.
+        """
+        assert self.feature is not None
+        scripts = sorted(features_to_scripts[self.feature])
+        if __debug__ and self.required:
+            for script in scripts:
+                assert any(self.feature in stage and self.feature in REQUIRED_FEATURES
+                    for stage in KNOWN_SHAPE_PLANS[script]), (
+                    f"The phase system does not support the feature '{self.feature}' for the script '{script}'")
+        return scripts
+
+    @overload
+    def to_asts(
+        self,
+        features_to_scripts: None,
+        class_asts: Mapping[str, fontTools.feaLib.ast.GlyphClassDefinition],
+        named_lookup_asts: Mapping[str, fontTools.feaLib.ast.LookupBlock],
+        name: str,
+    ) -> fontTools.feaLib.ast.LookupBlock:
+        ...
+
+    @overload
+    def to_asts(
+        self,
+        features_to_scripts: Mapping[str, AbstractSet[str]],
+        class_asts: Mapping[str, fontTools.feaLib.ast.GlyphClassDefinition],
+        named_lookup_asts: Mapping[str, fontTools.feaLib.ast.LookupBlock],
+        name: int,
+    ) -> tuple[fontTools.feaLib.ast.LookupBlock, fontTools.feaLib.ast.FeatureBlock]:
+        ...
 
     def to_asts(
         self,
+        features_to_scripts: Mapping[str, AbstractSet[str]] | None,
         class_asts: Mapping[str, fontTools.feaLib.ast.GlyphClassDefinition],
         named_lookup_asts: Mapping[str, fontTools.feaLib.ast.LookupBlock],
-        name: Union[str, int],
-    ) -> Sequence[fontTools.feaLib.ast.Block]:
+        name: str | int,
+    ) -> fontTools.feaLib.ast.LookupBlock | tuple[fontTools.feaLib.ast.LookupBlock, fontTools.feaLib.ast.FeatureBlock]:
         """Converts this lookup to fontTools feaLib ASTs.
 
         Args:
+            features_to_scripts: A mapping from feature tags to sets of
+                script tags, if this lookup is anonymous, or else
+                ``None``. If this is an anonymous lookup, the mapping
+                must contain this lookup’s feature tag. The associated
+                script tags, which must be a superset of what
+                ``self.get_scripts`` returns for the classes
+                corresponding to `class_asts`, are used in the second
+                returned AST.
             class_asts: A map to glyph classes from their names.
             named_lookup_asts: A map to named lookup ASTs from their
                 names.
@@ -801,27 +896,28 @@ class Lookup:
                 lookup among all anonymous lookups.
 
         Returns:
-            A list of one or two fontTools feaLib ASTs corresponding to
-            this lookup. The first AST is always a
+            One or two fontTools feaLib ASTs corresponding to this
+            lookup. The first (or only) AST is a
             `fontTools.feaLib.ast.LookupBlock`. If this is an anonymous
-            lookup, the second AST is a
+            lookup, the return value is a tuple, whose second AST is a
             `fontTools.feaLib.ast.FeatureBlock`.
         """
         named_lookup = self.feature is None
-        assert named_lookup == isinstance(name, str)
+        assert named_lookup == isinstance(name, str) == (features_to_scripts is None)
         contextual = any(r.is_contextual() for r in self.rules)
         multiple = any(r.is_multiple() for r in self.rules)
         if named_lookup:
             lookup_block = fontTools.feaLib.ast.LookupBlock(name)
-            asts = [lookup_block]
+            asts: fontTools.feaLib.ast.LookupBlock | tuple[fontTools.feaLib.ast.LookupBlock, fontTools.feaLib.ast.FeatureBlock] = lookup_block
         else:
             lookup_block = fontTools.feaLib.ast.LookupBlock(f'lookup_{name}')
             feature_block = fontTools.feaLib.ast.FeatureBlock(self.feature)
-            for script in self.scripts:
+            assert features_to_scripts is not None
+            for script in self._get_sorted_scripts(features_to_scripts):
                 feature_block.statements.append(fontTools.feaLib.ast.ScriptStatement(script))
                 feature_block.statements.append(fontTools.feaLib.ast.LanguageStatement(self.language))
                 feature_block.statements.append(fontTools.feaLib.ast.LookupReferenceStatement(lookup_block))
-            asts = [lookup_block, feature_block]
+            asts = (lookup_block, feature_block)
         lookup_block.statements.append(fontTools.feaLib.ast.LookupFlagStatement(
             self.flags,
             markFilteringSet=fontTools.feaLib.ast.GlyphClassName(class_asts[self.mark_filtering_set])
@@ -830,7 +926,7 @@ class Lookup:
         lookup_block.statements.extend({
                 ast.asFea(): ast
                     for r in self.rules
-                    for ast in r.to_asts(class_asts, named_lookup_asts, contextual, multiple, self.reversed)
+                    for ast in r.to_asts(class_asts, named_lookup_asts, contextual, multiple, self.reverse)
             }.values())
         return asts
 
@@ -842,7 +938,8 @@ class Lookup:
     def append(self, rule: Rule) -> None:
         """Adds a rule to the end of the list of rules.
 
-        This method ignores ``prepending``.
+        Args:
+            rule: A rule.
 
         Raises:
             ValueError: If the list of rules is frozen.
@@ -852,42 +949,37 @@ class Lookup:
     def extend(self, other: Lookup) -> None:
         """Extends this lookup with rules from another lookup.
 
-        If prepending, `other`’s rules are added to the front of the
-        list, ending up in reverse order from how they are in `other`.
-        Otherwise, they are added to the end, ending up in the same
-        order.
+        Rules are added to the end of this lookup’s list, ending up in
+        the same order as they are in `other`.
 
-        The lookups must agree in their features, scripts, and
-        languages, or lack thereof, and in whether they prepend.
+        The lookups must agree in their features and languages, or lack
+        thereof, and in whether they are required and are reversed.
 
         Args:
             other: A lookup.
+
+        Raises:
+            ValueError: If the list of rules is frozen.
         """
         assert self.feature == other.feature, f"Incompatible features: '{self.feature}' != '{other.feature}'"
-        assert self.scripts == other.scripts, f'''Incompatible script sets: {{{
-                ', '.join(f"'{script}'" for script in self.scripts)
-            }}} != {{{
-                ', '.join(f"'{script}'" for script in other.scripts)
-            }}}'''
         assert self.language == other.language, f"Incompatible languages: '{self.language}' != '{other.language}'"
-        assert self.prepending == other.prepending, f'Incompatible prepending values: {self.prepending} != {other.prepending}'
-        if self.prepending:
-            for rule in other.rules:
-                self.rules.insert(0, rule)
-        else:
-            for rule in other.rules:
-                self.append(rule)
+        assert self.required == other.required, f'Incompatible required values: {self.required} != {other.required}'
+        assert self.reverse == other.reverse, f'Incompatible reverse values: {self.reverse} != {other.reverse}'
+        self.rules.extend(other.rules)
+
+
+if TYPE_CHECKING:
+    AddRule = Callable[[Lookup, Rule], None]
 
 
 def _add_rule(
     autochthonous_schemas: Iterable[schema.Schema],
     output_schemas: OrderedSet[schema.Schema],
-    classes: Mapping[str, _FreezableList[schema.Schema]],
+    classes: Mapping[str, FreezableList[schema.Schema]],
     named_lookups: Mapping[str, Lookup],
     lookup: Lookup,
     rule: Rule,
-    track_possible_outputs: bool = True,
-):
+) -> None:
     """Adds a rule to a lookup.
 
     It only makes sense to call this function in the context of a phase
@@ -906,58 +998,73 @@ def _add_rule(
             modify it.
         lookup: The lookup to add `rule` to.
         rule: The rule to add.
-        track_possible_outputs: Whether to allow removing schemas from
-            `output_schemas`. Tracking is usually the right thing to do,
-            but it can sometimes cause a crash in fontTools, so it can
-            be disabled.
     """
-    def ignored(schema: schema.Schema) -> bool:
-        """Returns whether `rule` would ignore a schema.
-
-        Args:
-            schema: The schema that might be ignored.
-        """
-        glyph_class = schema.glyph_class
-        return bool(
-            glyph_class == GlyphClass.BLOCKER and lookup.flags & fontTools.otlLib.builder.LOOKUP_FLAG_IGNORE_BASE_GLYPHS
-            or glyph_class == GlyphClass.JOINER and lookup.flags & fontTools.otlLib.builder.LOOKUP_FLAG_IGNORE_LIGATURES
-            or glyph_class == GlyphClass.MARK and (
-                lookup.flags & fontTools.otlLib.builder.LOOKUP_FLAG_IGNORE_MARKS
-                or lookup.mark_filtering_set and schema not in classes[lookup.mark_filtering_set]
-            )
-        )
-
-    def check_ignored(target_part: Iterable[Union[schema.Schema, str]]) -> None:
-        """Asserts that a rule part contains no ignored schemas.
-
-        It is not useful for a rule to mention an ignored schema. It is
-        probably a bug if one does.
-
-        Args:
-            target_part: Part of the rule being added.
-        """
-        for s in target_part:
-            if isinstance(s, str):
-                ignored_schema = next(filter(ignored, classes[s]), None)
-                assert ignored_schema is None, f'''At least one glyph in @{s} ({
-                        ignored_schema
-                    }) appears in a substitution where it is ignored'''
-            else:
-                assert not ignored(s), f'{s} appears in a substitution where it is ignored'
-
-    check_ignored(rule.contexts_in)
-    if lookup.feature is None:
-        # The first item in a named lookup’s input sequence is immune to that
-        # named lookup’s lookup flags. It is guaranteed to (try to) match the
-        # glyph at the targeted position in the rule that references the named
-        # lookup.
-        inputs = iter(rule.inputs)
-        next(inputs)
-        check_ignored(inputs)
-    else:
-        check_ignored(rule.inputs)
     assert rule.contexts_out is not None
-    check_ignored(rule.contexts_out)
+
+    if __debug__:
+        if lookup.mark_filtering_set:
+            for mark in classes[lookup.mark_filtering_set]:
+                assert mark.glyph_class == GlyphClass.MARK, f'''{mark} has GDEF class {mark.glyph_class}, but it appears in {
+                    lookup.mark_filtering_set}, a mark filtering set'''
+
+        def ignored(schema: schema.Schema) -> bool:
+            """Returns whether `rule` would ignore a schema.
+
+            Args:
+                schema: The schema that might be ignored.
+            """
+            glyph_class = schema.glyph_class
+            return bool(
+                glyph_class == GlyphClass.JOINER and lookup.flags & fontTools.otlLib.builder.LOOKUP_FLAG_IGNORE_LIGATURES
+                or glyph_class == GlyphClass.MARK and (
+                    lookup.flags & fontTools.otlLib.builder.LOOKUP_FLAG_IGNORE_MARKS
+                    or lookup.mark_filtering_set and schema not in classes[lookup.mark_filtering_set]
+                )
+                ,
+            )
+
+        def check_ignored(target_part: Iterable[schema.Schema | str]) -> None:
+            """Asserts that a rule part contains no ignored schemas.
+
+            It is not useful for a rule to mention an ignored schema. It
+            is probably a bug if one does.
+
+            Args:
+                target_part: Part of the rule being added.
+            """
+            for s in target_part:
+                if isinstance(s, str):
+                    ignored_schema = next(filter(ignored, classes[s]), None)
+                    assert ignored_schema is None, f'''At least one glyph in @{s} ({
+                            ignored_schema
+                        }) appears in a substitution where it is ignored'''
+                else:
+                    assert not ignored(s), f'{s} appears in a substitution where it is ignored'
+
+        check_ignored(rule.contexts_in)
+        if lookup.feature is None:
+            # The first item in a named lookup’s input sequence is immune to that
+            # named lookup’s lookup flags. It is guaranteed to (try to) match the
+            # glyph at the targeted position in the rule that references the named
+            # lookup.
+            inputs = iter(rule.inputs)
+            next(inputs)
+            check_ignored(inputs)
+        else:
+            check_ignored(rule.inputs)
+        check_ignored(rule.contexts_out)
+
+    if not rule.get_scripts(classes):
+        # If a rule has no scripts, its pieces must have non-overlapping script
+        # sets, so the rule can never apply and should be skipped. As an
+        # exception, if a class in the rule is empty, the phase is probably not
+        # done populating its classes, so don’t skip the rule yet.
+        rule_pieces = [*rule.contexts_in, *rule.inputs, *rule.contexts_out]
+        if not any(isinstance(s, str) and not classes[s] for s in rule_pieces):
+            for s in rule_pieces:
+                if isinstance(s, str):
+                    classes[s].freeze()
+            return
 
     for input in rule.inputs:
         if isinstance(input, str):
@@ -967,17 +1074,14 @@ def _add_rule(
         elif input in autochthonous_schemas:
             return
 
-    def is_prefix(maybe_prefix: Sequence[Union[schema.Schema, str]], full: Sequence[Union[schema.Schema, str]]) -> bool:
-        return len(maybe_prefix) <= len(full) and all(map(lambda mp_f: mp_f[0] == mp_f[1], zip(maybe_prefix, full)))
+    def is_prefix(maybe_prefix: Sequence[schema.Schema | str], full: Sequence[schema.Schema | str]) -> bool:
+        return len(maybe_prefix) <= len(full) and all(mp_f[0] == mp_f[1] for mp_f in zip(maybe_prefix, full, strict=False))
 
-    def is_suffix(maybe_suffix: Sequence[Union[schema.Schema, str]], full: Sequence[Union[schema.Schema, str]]) -> bool:
-        return len(maybe_suffix) <= len(full) and all(map(lambda mp_f: mp_f[0] == mp_f[1], zip(reversed(maybe_suffix), reversed(full))))
+    def is_suffix(maybe_suffix: Sequence[schema.Schema | str], full: Sequence[schema.Schema | str]) -> bool:
+        return len(maybe_suffix) <= len(full) and all(mp_f[0] == mp_f[1] for mp_f in zip(reversed(maybe_suffix), reversed(full), strict=False))
 
-    if not lookup.prepending and any(r.is_contextual() for r in lookup.rules):
-        # TODO: Check prepending lookups too.
-        for i, previous_rule in enumerate(lookup.rules):
-            if lookup.prepending:
-                previous_rule, rule = rule, previous_rule  # type: ignore[unreachable]
+    if any(r.is_contextual() for r in lookup.rules):
+        for previous_rule in lookup.rules:
             assert previous_rule.contexts_out is not None
             if (previous_rule.inputs == rule.inputs
                 and is_suffix(previous_rule.contexts_in, rule.contexts_in)
@@ -985,24 +1089,38 @@ def _add_rule(
                 and (previous_rule.contexts_in != rule.contexts_in or previous_rule.contexts_out != rule.contexts_out)
             ):
                 return
+
+    def remove_unconditionally_substituted_schemas() -> None:
+        """Removes schemas from `output_schemas` that are
+        unconditionally substituted by `rule`.
+
+        A schema is unconditionally substituted by `rule` if `rule` is a
+        non-contextual rule of a required lookup, the input of `rule`
+        contains only one element which either is or contains that
+        schema, and no other preceding rule in the same lookup uses that
+        schema in its input.
+        """
+        if not (lookup.required
+            and not rule.contexts_in
+            and not rule.contexts_out
+            and len(rule.inputs) == 1
+        ):
+            return
+        input = rule.inputs[0]
+        unconditionally_substituted_schemas = set(classes[input]) if isinstance(input, str) else {input}
+        for previous_rule in lookup.rules:
+            for previous_input in previous_rule.inputs:
+                if isinstance(previous_input, str):
+                    unconditionally_substituted_schemas.difference_update(classes[previous_input])
+                else:
+                    unconditionally_substituted_schemas.discard(previous_input)
+        for schema_to_remove in unconditionally_substituted_schemas:
+            output_schemas.remove(schema_to_remove)
+
+    remove_unconditionally_substituted_schemas()
     lookup.append(rule)
 
-    # FIXME: `track_possible_outputs` is a manual workaround for this function’s
-    # inability to track possible outputs between rules in the same lookup.
-    if (track_possible_outputs
-        and lookup.required
-        and not rule.contexts_in
-        and not rule.contexts_out
-        and len(rule.inputs) == 1
-    ):
-        input = rule.inputs[0]
-        if isinstance(input, str):
-            for s in classes[input]:
-                output_schemas.remove(s)
-        else:
-            output_schemas.remove(input)
-
-    registered_lookups: MutableSet[Optional[str]] = {None}
+    registered_lookups: MutableSet[str | None] = {None}
 
     def register_output_schemas(rule: Rule) -> bool:
         if rule.outputs is not None:
@@ -1021,40 +1139,55 @@ def _add_rule(
                     output_schemas.add(output)
             return froze
         elif rule.lookups is not None:
-            for lookup in rule.lookups:
-                if lookup not in registered_lookups:
-                    assert lookup is not None
-                    registered_lookups.add(lookup)
+            for named_lookup in rule.lookups:
+                if named_lookup not in registered_lookups:
+                    assert named_lookup is not None
+                    registered_lookups.add(named_lookup)
                     froze = False
-                    for rule in named_lookups[lookup].rules:
-                        if register_output_schemas(rule):
+                    for named_lookup_rule in named_lookups[named_lookup].rules:
+                        if register_output_schemas(named_lookup_rule):
                             froze = True
                     if froze:
-                        named_lookups[lookup].freeze()
+                        named_lookups[named_lookup].freeze()
         return False
 
     register_output_schemas(rule)
 
 
+if TYPE_CHECKING:
+    Phase = Callable[
+        [
+            Arg(Builder, 'builder'),
+            Arg(OrderedSet[schema.Schema], 'original_schemas'),
+            Arg(OrderedSet[schema.Schema], 'schemas'),
+            Arg(OrderedSet[schema.Schema], 'new_schemas'),
+            Arg(PrefixView[FreezableList[schema.Schema]], 'classes'),
+            Arg(PrefixView[Lookup], 'named_lookups'),
+            Arg(AddRule, 'add_rule'),
+        ],
+        Sequence[Lookup],
+    ]
+
+
 def run_phases(
-    builder,
+    builder: Builder,
     all_input_schemas: Iterable[schema.Schema],
-    phases: Iterable,
-    all_classes: Optional[collections.defaultdict[str, Collection[schema.Schema]]] = None,
-) -> Tuple[
+    phases: Iterable[Phase],
+    all_classes: collections.defaultdict[str, FreezableList[schema.Schema]] | None = None,
+) -> tuple[
     OrderedSet[schema.Schema],
     Iterable[schema.Schema],
-    MutableSequence[Tuple[Lookup, Any]],
-    collections.defaultdict[str, Collection[schema.Schema]],
-    MutableMapping[str, Tuple[Lookup, Any]],
+    MutableSequence[tuple[Lookup, Phase]],
+    collections.defaultdict[str, FreezableList[schema.Schema]],
+    MutableMapping[str, tuple[Lookup, Phase]],
 ]:
     """Runs a sequence of phases.
 
     Args:
-        builder (Builder): The source of everything.
+        builder: The source of everything.
         all_input_schemas: The input schemas for the first iteration of
             the first phase.
-        phases (Iterable[Phase]): The phases to run.
+        phases: The phases to run.
         all_classes: The font’s global mapping to classes from their
             names. If ``None``, this method starts with a new empty mapping.
 
@@ -1070,13 +1203,14 @@ def run_phases(
         5. A mapping from named lookups’ names to 2-tuples of named
            lookups and their generating phases.
     """
+    previous_feature = None
     all_schemas = OrderedSet(all_input_schemas)
     all_input_schemas = OrderedSet(all_input_schemas)
-    all_lookups_with_phases: MutableSequence[Tuple[Lookup, Any]] = []
+    all_lookups_with_phases: MutableSequence[tuple[Lookup, Phase]] = []
     if all_classes is None:
-        all_classes = collections.defaultdict(_FreezableList)
-    all_named_lookups_with_phases: dict[str, Tuple[Lookup, Any]] = {}
-    for phase_index, phase in enumerate(phases):
+        all_classes = collections.defaultdict(FreezableList)
+    all_named_lookups_with_phases: dict[str, tuple[Lookup, Phase]] = {}
+    for phase_index, phase in enumerate(phases, start=schema.CURRENT_PHASE_INDEX + 1):
         schema.CURRENT_PHASE_INDEX = phase_index
         all_output_schemas: OrderedSet[schema.Schema] = OrderedSet()
         autochthonous_schemas: OrderedSet[schema.Schema] = OrderedSet()
@@ -1085,7 +1219,7 @@ def run_phases(
         output_schemas = OrderedSet(all_input_schemas)
         classes = PrefixView(phase, all_classes)
         named_lookups: PrefixView[Lookup] = PrefixView(phase, {})
-        lookups: Optional[Sequence[Lookup]] = None
+        lookups: Sequence[Lookup] | None = None
         while new_input_schemas:
             output_lookups = phase(
                 # TODO: `builder` is only used to check which phase generated a schema,
@@ -1103,22 +1237,42 @@ def run_phases(
                     output_schemas,
                     classes,
                     named_lookups,
-                 ),
-             )
+                ),
+            )
+            if builder.unjoined and any(lookup.feature not in SUBSET_FEATURES for lookup in output_lookups):
+                assert all(lookup.feature not in SUBSET_FEATURES for lookup in output_lookups), (
+                    f'Mix of subset and non-subset features: {[lookup.feature for lookup in output_lookups]}')
+                output_lookups = []
+                break
             if lookups is None:
                 lookups = output_lookups
+                for lookup in lookups:
+                    previous_feature_index = -1
+                    feature_index = -1
+                    for shape_plan in KNOWN_SHAPE_PLANS.values():
+                        for i, stage in enumerate(shape_plan):
+                            if previous_feature in stage:
+                                previous_feature_index = i
+                            if lookup.feature in stage:
+                                feature_index = i
+                    assert previous_feature_index <= feature_index, f"Feature '{previous_feature}' must not follow feature '{lookup.feature}'"
+                    previous_feature = lookup.feature
             else:
                 assert len(lookups) == len(output_lookups), f'Incompatible lookup counts for phase {phase.__name__}'
                 for i, lookup in enumerate(lookups):
                     lookup.extend(output_lookups[i])
-            if len(output_lookups) == 1:
-                might_have_feedback = False
-                for rule in (lookup := output_lookups[0]).rules:
-                    if rule.contexts_out if lookup.reversed else rule.contexts_in:
-                        might_have_feedback = True
-                        break
-            else:
-                might_have_feedback = True
+            match output_lookups:
+                case []:
+                    might_have_feedback = False
+                case [lookup]:
+                    might_have_feedback = False
+                    for rule in lookup.rules:
+                        if rule.contexts_out if lookup.reverse else rule.contexts_in:
+                            might_have_feedback = True
+                            break
+                case _:
+                    might_have_feedback = True
+            features = {cast(str, lookup.feature) for lookup in lookups}
             for output_schema in output_schemas:
                 all_output_schemas.add(output_schema)
             new_input_schemas = OrderedSet()
@@ -1128,9 +1282,15 @@ def run_phases(
                         all_input_schemas.add(output_schema)
                         autochthonous_schemas.add(output_schema)
                         new_input_schemas.add(output_schema)
+                        output_schema.features = features
+            else:
+                for output_schema in output_schemas:
+                    if output_schema not in all_input_schemas:
+                        output_schema.features = features
+        if lookups is None:
+            continue
         all_input_schemas = all_output_schemas
         all_schemas |= all_input_schemas
-        assert lookups is not None
         all_lookups_with_phases.extend((lookup, phase) for lookup in lookups)
         all_named_lookups_with_phases |= ((name, (lookup, phase)) for name, lookup in named_lookups.items())
     return (

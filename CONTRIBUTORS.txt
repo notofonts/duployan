@@ -9,5 +9,3 @@
 # Names should be added to this file as:
 # Name <email address>
 
-# Version 3.000-
-David Corbett <corbett.dav@northeastern.edu>

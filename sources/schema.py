@@ -1,4 +1,4 @@
-# Copyright 2018-2019, 2022 David Corbett
+# Copyright 2018-2019, 2022-2024 David Corbett
 # Copyright 2020-2022 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,47 +19,28 @@
 
 from __future__ import annotations
 
-
-__all__ = [
-    'Ignorability',
-    'MAX_DOUBLE_MARKS',
-    'MAX_HUB_PRIORITY',
-    'NO_PHASE_INDEX',
-    'Schema',
-]
-
-
-from collections.abc import Collection
-from collections.abc import Hashable
 from collections.abc import Mapping
-from collections.abc import MutableMapping
-from collections.abc import MutableSequence
-from collections.abc import Sequence
 import enum
 import functools
-import math
 import re
-import typing
-from typing import Any
-from typing import Callable
-from typing import ClassVar
 from typing import Final
-from typing import Iterable
-from typing import Optional
-from typing import Tuple
-from typing import Union
+from typing import Self
+from typing import TYPE_CHECKING
+from typing import cast
 import unicodedata
 
-
 import fontTools.agl
-import fontforge
+import fontTools.merge.unicode
+from typing_extensions import override
 
-
+import anchors
 from shapes import AnchorWidthDigit
-from shapes import ChildEdge
 from shapes import Circle
 from shapes import CircleRole
+from shapes import Complex
+from shapes import Component
 from shapes import Curve
+from shapes import Digit
 from shapes import DigitStatus
 from shapes import EntryWidthDigit
 from shapes import GlyphClassSelector
@@ -71,16 +52,33 @@ from shapes import MarkAnchorSelector
 from shapes import Notdef
 from shapes import Ou
 from shapes import RightBoundDigit
-from shapes import Shape
-from shapes import Space
+from shapes import RotatedComplex
 from utils import CAP_HEIGHT
 from utils import CLONE_DEFAULT
-from utils import Context
 from utils import DEFAULT_SIDE_BEARING
 from utils import GlyphClass
 from utils import MAX_TREE_WIDTH
 from utils import NO_CONTEXT
+from utils import SUBSET_FEATURES
 from utils import Type
+from utils import cps_to_scripts
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from collections.abc import Collection
+    from collections.abc import Hashable
+    from collections.abc import Iterable
+    from collections.abc import MutableMapping
+    from collections.abc import MutableSequence
+    from collections.abc import Sequence
+
+    from _typeshed import SupportsRichComparison
+    import fontforge
+
+    from shapes import Shape
+    from utils import CloneDefault
+    from utils import Context
 
 
 #: An integer representing the lack of a phase index. It is less than
@@ -135,16 +133,16 @@ class Schema:
 
     A schema is mostly immutable. It ultimately represents certain
     unchangeable bytes in the generated font and so it would not make
-    sense to mutate it. Two exceptions are `canonical_schema` and
-    `lookalike_group`. These are used for build-time optimizations
-    related to the schema itself, as a Python object, rather than as the
-    font data it represents.
+    sense to mutate it. Exceptions include `canonical_schema`,
+    `anchors`, `scripts`, and `lookalike_group`. These are used for
+    build-time optimizations related to the schema itself, as a Python
+    object, rather than as the font data it represents.
 
-    The third exception to immutability is `glyph`, the FontForge object
+    Another exception to immutability is `glyph`, the FontForge object
     corresponding to this schema. `glyph` is set once the glyph has been
     drawn, which, as an optimization, is not done till schemas have been
     merged. This is rather a case of caching and lazy initialization
-    than full immutability.
+    than mutability.
 
     Attributes:
         cmap: The code point the 'cmap' table should map to this
@@ -177,13 +175,20 @@ class Schema:
             be a large space to the right of the base. Technically, a
             wide diacritic on a narrow non-joining base could overlap
             adjacent glyphs, but it is unlikely to be a problem in
-            practice.
+            practice. ``None`` means the widthlessness has not been
+            determined, in which case the schema should be assumed to
+            have width.
         marks: The sequence of marks of this schema, if this schema
             represents a glyph that can be decomposed into a base and
             some marks. For most schemas, this is empty.
-        ignorability: The ignorability of this schema’s character.
+        override_ignored: Whether to override this schema’s character to
+            be treated as not default ignorable. The value is not
+            meaningful if `cmap` is ``None``.
         encirclable: Whether this schema’s character is attested with a
             following U+20DD COMBINING ENCLOSING CIRCLE.
+        might_be_child: Whether this schema might be a child. The true
+            value of whether it can be a child also depends on its shape
+            and size.
         maximum_tree_width: The maximum width of a shorthand overlap
             sequence following this schema. The true maximum width may
             be lower, depending on this schema’s shape and size.
@@ -204,14 +209,21 @@ class Schema:
         base_angle: The angle of the shape of the original schema from
             which this schema is derived by `rotate_diacritic`. If this
             schema has not been so derived, the value is ``None``.
-        cps: The code point sequence corresponding to this schema. This
-            doesn’t affect anything critical in the final font (just
-            glyph names), unlike the `cmap` attribute.
+        cps: The code point sequence corresponding to this schema.
         original_shape: The type of the `path` attribute of the original
             schema from which this schema is derived through some number
             of phases.
+        anchors: The anchors of marks that are known to be able to
+            attach to this schema, if this schema is not a mark.
+        scripts: The intersection of the sets of script tags associated
+            with the `cps` of this schema and of all schemas
+            canonicalized to this schema.
         phase_index: The phase index for the phase in which this schema
             was generated. See `CURRENT_PHASE_INDEX`.
+        features: The set of the feature tags of the lookups generated
+            by the phase at index `phase_index`, or ``None``. It starts
+            as ``None`` and should be set once the feature set is known.
+            It stays ``None`` for glyphs in 'cmap'.
         glyph: The cached FontForge glyph generated for this schema, or
             ``None`` if one has not been generated.
     """
@@ -224,18 +236,21 @@ class Schema:
     #: is 4 characters long. Thus, the suffix can be up to 6 characters
     #: long, and the effective maximum glyph name length is 57
     #: characters.
-    _MAX_GLYPH_NAME_LENGTH: ClassVar[int] = 63 - 2 - 4
+    _MAX_GLYPH_NAME_LENGTH: Final[int] = 63 - 2 - 4
 
     #: A pattern that must not appear in an undisambiguated glyph name.
     #: This ensures that a glyph name can never end with what appears to
     #: be a disambiguatory suffix but isn’t.
-    _RESERVED_GLYPH_NAME_PATTERN: re.Pattern[str] = re.compile(r'\._[1-9A-F][0-9A-F]*$')
+    _RESERVED_GLYPH_NAME_PATTERN: re.Pattern[str] = re.compile(r'\._[1-9A-F][0-9A-F]*(\.|$)')
 
     #: A pattern matching a ``uni`` glyph name component that follows
     #: and can be collapsed into a preceding ``uni`` glyph name
     #: component. For example, ``uni1234_uniABCD`` can be collapsed into
     #: ``uni1234ABCD``.
-    _COLLAPSIBLE_UNI_NAME: ClassVar[re.Pattern[str]] = re.compile(r'(?<=uni[0-9A-F]{4})_uni(?=[0-9A-F]{4})')
+    _COLLAPSIBLE_UNI_NAME: Final[re.Pattern[str]] = re.compile(r'(?<=(^|(?<=_))uni[0-9A-F]{4})_uni(?=[0-9A-F]{4}(_|$))')
+
+    #: A pattern matching the first component of a glyph name.
+    _FIRST_COMPONENT_PATTERN: Final[re.Pattern[str]] = re.compile(r'^([^.]*)')
 
     #: An iterable of substitutions to apply to a character name to get
     #: its glyph name. A substitution is a tuple of a search string and
@@ -246,11 +261,24 @@ class Schema:
     #: character name is a Unicode character name or, for nameless code
     #: points, the glyph name recommended by the Adobe Glyph List
     #: Specification.
-    _CHARACTER_NAME_RAW_SUBSTITUTIONS: ClassVar[Iterable[Tuple[str, Union[str, Callable[[re.Match[str]], str]]]]] = [
+    _CHARACTER_NAME_RAW_SUBSTITUTIONS: Final[Iterable[tuple[str, str | Callable[[re.Match[str]], str]]]] = [
         # Custom PUA names
         (r'^uniE000$', 'BOUND'),
         (r'^uniE001$', 'LATIN CROSS POMMEE'),
         (r'^uniE003$', 'HEART WITH CROSS'),
+        (r'^uniE010$', 'TWO LINES JOINED CONVERGING LEFT'),
+        (r'^uniE011$', 'LEFT PARENTHESIS WITH STROKE'),
+        (r'^uniE012$', 'RIGHT PARENTHESIS WITH STROKE'),
+        (r'^uniE013$', 'LEFT PARENTHESIS WITH DOUBLE STROKE'),
+        (r'^uniE014$', 'RIGHT PARENTHESIS WITH DOUBLE STROKE'),
+        (r'^uniE015$', 'STENOGRAPHIC SEMICOLON'),
+        (r'^uniE016$', 'STENOGRAPHIC QUESTION MARK'),
+        (r'^uniE021$', 'COMBINING DIGIT ONE ABOVE'),
+        (r'^uniE02A$', 'COMBINING RING-AND-DOT ABOVE'),
+        (r'^uniE031$', 'COMBINING DIGIT ONE BELOW'),
+        (r'^uniE033$', 'COMBINING DIGIT THREE BELOW'),
+        (r'^uniE035$', 'COMBINING DIGIT FIVE BELOW'),
+        (r'^uniE037$', 'COMBINING DIGIT SEVEN BELOW'),
         (r'^uniEC02$', 'DUPLOYAN LETTER REVERSED P'),
         (r'^uniEC03$', 'DUPLOYAN LETTER REVERSED T'),
         (r'^uniEC04$', 'DUPLOYAN LETTER REVERSED F'),
@@ -260,6 +288,7 @@ class Schema:
         (r'^uniEC1A$', 'DUPLOYAN LETTER REVERSED N'),
         (r'^uniEC1B$', 'DUPLOYAN LETTER REVERSED J'),
         (r'^uniEC1C$', 'DUPLOYAN LETTER REVERSED S'),
+        (r'^uniEC9A$', 'DUPLOYAN PUNCTUATION CHINOOK FULL STOP WITH DOUBLE STROKE'),
         # Unicode name aliases
         (r'^COMBINING GRAPHEME JOINER$', 'CGJ'),
         (r'^ZERO WIDTH SPACE$', 'ZWSP'),
@@ -279,7 +308,8 @@ class Schema:
         # Unnecessary words
         (r'\bDOTS INSIDE AND ABOVE\b', 'DOTS'),
         (r' ACCENT\b', ''),
-        (r' (AND|WITH) ', ' '),
+        (r'[- ](AND|WITH)[- ]', ' '),
+        (r'\bARABIC-INDIC\b', 'ARABIC'),
         (r'\bCOMBINING ', ''),
         (r'\bDIGIT ', ''),
         (r'^DUPLOYAN ((AFFIX( ATTACHED)?|LETTER|PUNCTUATION|SIGN) )?', ''),
@@ -293,7 +323,7 @@ class Schema:
 
     #: `_CHARACTER_NAME_RAW_SUBSTITUTIONS` with all the search strings
     #: compiled into pattern objects.
-    _CHARACTER_NAME_SUBSTITUTIONS: ClassVar[Iterable[Tuple[re.Pattern[str], Union[str, Callable[[re.Match[str]], str]]]]] = [
+    _CHARACTER_NAME_SUBSTITUTIONS: Final[Iterable[tuple[re.Pattern[str], str | Callable[[re.Match[str]], str]]]] = [
         (re.compile(pattern_repl[0]), pattern_repl[1]) for pattern_repl in _CHARACTER_NAME_RAW_SUBSTITUTIONS
     ]
 
@@ -302,49 +332,51 @@ class Schema:
     #: `_CHARACTER_NAME_RAW_SUBSTITUTIONS` except that this is applied
     #: to a sequence of the outputs of `_CHARACTER_NAME_SUBSTITUTIONS`
     #: joined by ``"__"``.
-    _SEQUENCE_NAME_RAW_SUBSTITUTIONS: ClassVar[Sequence[Tuple[str, Union[str, Callable[[re.Match[str]], str]]]]] = [
+    _SEQUENCE_NAME_RAW_SUBSTITUTIONS: Final[Sequence[tuple[str, str | Callable[[re.Match[str]], str]]]] = [
         (r'__zwj__', '___'),
         (r'((?:[a-z]+_)+)_dtls(?=__|$)', lambda m: m.group(1)[:-1].upper()),
     ]
 
     #: `_SEQUENCE_NAME_RAW_SUBSTITUTIONS` with all the search strings
     #: compiled into pattern objects.
-    _SEQUENCE_NAME_SUBSTITUTIONS: ClassVar[Sequence[Tuple[re.Pattern[str], Union[str, Callable[[re.Match[str]], str]]]]] = [
+    _SEQUENCE_NAME_SUBSTITUTIONS: Final[Sequence[tuple[re.Pattern[str], str | Callable[[re.Match[str]], str]]]] = [
         (re.compile(pattern_repl[0]), pattern_repl[1]) for pattern_repl in _SEQUENCE_NAME_RAW_SUBSTITUTIONS
     ]
 
     # TODO: This seems like a bad design.
     #: A mutable mapping of undisambiguated schema names to mutable
     #: sequences of all the schemas that share that name.
-    _canonical_names: MutableMapping[str, MutableSequence[Schema]] = {}
+    _canonical_names: Final[MutableMapping[str, MutableSequence[Schema]]] = {}
 
     def __init__(
             self,
-            cmap: Optional[int],
+            cmap: int | None,
             path: Shape,
             size: float,
             joining_type: Type = Type.JOINING,
             *,
             side_bearing: float = DEFAULT_SIDE_BEARING,
-            y_min: Optional[float] = 0,
-            y_max: Optional[float] = None,
+            y_min: float | None = 0,
+            y_max: float | None = None,
             child: bool = False,
-            can_lead_orienting_sequence: Optional[bool] = None,
+            can_lead_orienting_sequence: bool | None = None,
             ignored_for_topography: bool = False,
-            anchor: Optional[str] = None,
-            widthless: Optional[bool] = None,
-            marks: Optional[Sequence[Schema]] = None,
-            ignorability: Ignorability = Ignorability.DEFAULT_NO,
+            anchor: str | None = None,
+            widthless: bool | None = None,
+            marks: Sequence[Schema] | None = None,
+            override_ignored: bool = False,
             encirclable: bool = False,
-            maximum_tree_width: int = MAX_TREE_WIDTH,
-            shading_allowed: bool = True,
-            context_in: Optional[Context] = None,
-            context_out: Optional[Context] = None,
+            might_be_child: bool = True,
+            maximum_tree_width: int | None = None,
+            shading_allowed: bool | None = None,
+            context_in: Context | None = None,
+            context_out: Context | None = None,
             diphthong_1: bool = False,
             diphthong_2: bool = False,
-            base_angle: Optional[float] = None,
-            cps: Optional[Sequence[int]] = None,
-            original_shape: Optional[type[Shape]] = None,
+            base_angle: float | None = None,
+            cps: Sequence[int] | None = None,
+            original_shape: type[Shape] | None = None,
+            _anchors: set[str] | None = None,
     ) -> None:
         """Initializes this `Schema`.
 
@@ -361,15 +393,21 @@ class Schema:
                 ``can_lead_orienting_sequence`` attribute, or ``None``
                 to set the attribute to ``joining_type ==
                 Type.ORIENTING``.
-            ignored_for_topography: The ``ignored_for_topography`` attribute.
+            ignored_for_topography: The ``ignored_for_topography``
+                attribute.
             anchor: The ``anchor`` attribute.
             widthless: The ``widthless`` attribute.
             marks: The ``marks`` attribute, or ``None`` to set the
                 attribute to an empty sequence.
-            ignorability: The ``ignorability`` attribute.
+            override_ignored: The ``override_ignored`` attribute.
             encirclable: The ``encirclable`` attribute.
-            maximum_tree_width: The ``maximum_tree_width`` attribute.
-            shading_allowed: The ``shading_allowed`` attribute.
+            might_be_child: The ``might_be_child`` attribute.
+            maximum_tree_width: The ``maximum_tree_width`` attribute, or
+                ``None`` to set the attribute to ``MAX_TREE_WIDTH`` if
+                ``cps`` is Duployan, or else 0.
+            shading_allowed: The ``shading_allowed`` attribute, or
+                ``None`` to set the attribute to whether ``cps`` is
+                Duployan.
             context_in: The ``context_in`` attribute, or ``None`` to set
                 the attribute to `NO_CONTEXT`.
             context_out: The ``context_out`` attribute, or ``None`` to
@@ -383,39 +421,45 @@ class Schema:
             original_shape: The ``original_shape`` attribute, or
                 ``None`` to set the attribute to ``type(path)``.
         """
-        assert not (marks and anchor), 'A schema has both marks {} and anchor {}'.format(marks, anchor)
+        assert not (marks and anchor), f'A schema has both marks {marks} and anchor {anchor}'
         assert not widthless or anchor, f'A widthless schema has anchor {anchor}'
-        self.cmap = cmap
-        self.path = path
-        self.size = size
-        self.joining_type = joining_type
-        self.side_bearing = side_bearing
-        self.y_min = y_min
-        self.y_max = y_max
-        self.child = child
-        self.can_lead_orienting_sequence = can_lead_orienting_sequence if can_lead_orienting_sequence is not None else joining_type == Type.ORIENTING
-        self.ignored_for_topography = ignored_for_topography
-        self.anchor = anchor
-        self.widthless = widthless
-        self.marks = marks or []
-        self.ignorability = ignorability
-        self.encirclable = encirclable
-        self.maximum_tree_width = maximum_tree_width
-        self.shading_allowed = shading_allowed
-        self.context_in = context_in or NO_CONTEXT
-        self.context_out = context_out or NO_CONTEXT
-        self.diphthong_1 = diphthong_1
-        self.diphthong_2 = diphthong_2
-        self.base_angle = base_angle
-        self.cps = cps or ([] if cmap is None else [cmap])
-        self.original_shape = original_shape or type(path)
-        self.phase_index = CURRENT_PHASE_INDEX
-        self._glyph_name: Optional[str] = None
+        assert cmap is None or fontTools.merge.unicode.is_Default_Ignorable(cmap) or not override_ignored, (
+            'A non-ignored schema does need overriding: it is already not ignored')
+        self.cmap: Final = cmap
+        self.path: Final = path
+        self.size: Final = size
+        self.joining_type: Final = joining_type
+        self.side_bearing: Final = side_bearing
+        self.y_min: Final = y_min
+        self.y_max: Final = y_max
+        self.child: Final = child
+        self.can_lead_orienting_sequence: Final = can_lead_orienting_sequence if can_lead_orienting_sequence is not None else joining_type == Type.ORIENTING
+        self.ignored_for_topography: Final = ignored_for_topography
+        self.anchor: Final = anchor
+        self.widthless: Final = widthless
+        self.marks: Final = marks or []
+        self.override_ignored: Final = override_ignored
+        self.encirclable: Final = encirclable
+        self.context_in: Final = context_in or NO_CONTEXT
+        self.context_out: Final = context_out or NO_CONTEXT
+        self.diphthong_1: Final = diphthong_1
+        self.diphthong_2: Final = diphthong_2
+        self.base_angle: Final = base_angle
+        self.cps: Final = tuple(cps) if cps is not None else () if cmap is None else (cmap,)
+        self.original_shape: Final = original_shape or type(path)
+        self.anchors: Final = _anchors if _anchors is not None else set()
+        self.scripts: Final = cps_to_scripts(self.cps)
+        self.might_be_child: Final = might_be_child
+        self.maximum_tree_width: Final = maximum_tree_width if maximum_tree_width is not None else MAX_TREE_WIDTH if self.scripts == {'dupl'} else 0
+        self.shading_allowed: Final = shading_allowed if shading_allowed is not None else self.scripts == {'dupl'}
+        self.phase_index: Final = CURRENT_PHASE_INDEX
+        self.features: set[str] | None = None
+        self._glyph_name: str | None = None
         self._canonical_schema: Schema = self
         self._lookalike_group: Collection[Schema] = [self]
-        self.glyph: Optional[fontforge.glyph] = None
+        self.glyph: fontforge.glyph | None = None
 
-    def sort_key(self) -> Any:
+    def sort_key(self) -> SupportsRichComparison:
         """Returns a sortable key representing this schema.
 
         This is used to decide which schema among many mergeable schemas
@@ -432,12 +476,11 @@ class Schema:
             not unicodedata.is_normalized('NFD', cmap_string),
             not self.cps,
             len(self.cps),
-            self.original_shape != type(self.path),
+            not isinstance(self.path, self.original_shape),
             self.cps,
-            len(self._calculate_name()),
         )
 
-    def glyph_id_sort_key(self) -> Any:
+    def glyph_id_sort_key(self) -> SupportsRichComparison:
         """Returns a sortable key representing the glyph ID of this
         schema’s glyph.
 
@@ -449,10 +492,11 @@ class Schema:
         shape = type(self.path)
         digit_shapes = [AnchorWidthDigit, EntryWidthDigit, LeftBoundDigit, RightBoundDigit]
         if shape in digit_shapes:
-            status = (DigitStatus.NORMAL if isinstance(self.path, EntryWidthDigit) else self.path.status).value  # type: ignore[attr-defined]
-            place = self.path.place  # type: ignore[attr-defined]
+            assert isinstance(self.path, Digit)
+            status = (DigitStatus.NORMAL if isinstance(self.path, EntryWidthDigit) else self.path.status).value
+            place = self.path.place
             digit_shape_index = digit_shapes.index(shape)
-            digit = self.path.digit  # type: ignore[attr-defined]
+            digit = self.path.digit
             other_shape_index = -1
         else:
             status = -1
@@ -472,31 +516,33 @@ class Schema:
     def clone(
         self,
         *,
-        cmap=CLONE_DEFAULT,
-        path=CLONE_DEFAULT,
-        size=CLONE_DEFAULT,
-        joining_type=CLONE_DEFAULT,
-        side_bearing=CLONE_DEFAULT,
-        y_min=CLONE_DEFAULT,
-        y_max=CLONE_DEFAULT,
-        child=CLONE_DEFAULT,
-        can_lead_orienting_sequence=CLONE_DEFAULT,
-        ignored_for_topography=CLONE_DEFAULT,
-        anchor=CLONE_DEFAULT,
-        widthless=CLONE_DEFAULT,
-        marks=CLONE_DEFAULT,
-        ignorability=CLONE_DEFAULT,
-        encirclable=CLONE_DEFAULT,
-        maximum_tree_width=CLONE_DEFAULT,
-        shading_allowed=CLONE_DEFAULT,
-        context_in=CLONE_DEFAULT,
-        context_out=CLONE_DEFAULT,
-        diphthong_1=CLONE_DEFAULT,
-        diphthong_2=CLONE_DEFAULT,
-        base_angle=CLONE_DEFAULT,
-        cps=CLONE_DEFAULT,
-        original_shape=CLONE_DEFAULT,
-    ):
+        cmap: int | None | CloneDefault = CLONE_DEFAULT,
+        path: Shape | CloneDefault = CLONE_DEFAULT,
+        size: float | CloneDefault = CLONE_DEFAULT,
+        joining_type: Type | CloneDefault = CLONE_DEFAULT,
+        side_bearing: float | CloneDefault = CLONE_DEFAULT,
+        y_min: float | None | CloneDefault = CLONE_DEFAULT,
+        y_max: float | None | CloneDefault = CLONE_DEFAULT,
+        child: bool | CloneDefault = CLONE_DEFAULT,
+        can_lead_orienting_sequence: bool | None | CloneDefault = CLONE_DEFAULT,
+        ignored_for_topography: bool | CloneDefault = CLONE_DEFAULT,
+        anchor: str | None | CloneDefault = CLONE_DEFAULT,
+        widthless: bool | CloneDefault = CLONE_DEFAULT,
+        marks: Sequence[Schema] | None | CloneDefault = CLONE_DEFAULT,
+        override_ignored: bool | CloneDefault = CLONE_DEFAULT,
+        encirclable: bool | CloneDefault = CLONE_DEFAULT,
+        might_be_child: bool | CloneDefault = CLONE_DEFAULT,
+        maximum_tree_width: int | CloneDefault = CLONE_DEFAULT,
+        shading_allowed: bool | CloneDefault = CLONE_DEFAULT,
+        context_in: Context | None | CloneDefault = CLONE_DEFAULT,
+        context_out: Context | None | CloneDefault = CLONE_DEFAULT,
+        diphthong_1: bool | CloneDefault = CLONE_DEFAULT,
+        diphthong_2: bool | CloneDefault = CLONE_DEFAULT,
+        base_angle: float | None | CloneDefault = CLONE_DEFAULT,
+        cps: Sequence[int] | None | CloneDefault = CLONE_DEFAULT,
+        original_shape: type[Shape] | None | CloneDefault = CLONE_DEFAULT,
+        _anchors: set[str] | None | CloneDefault = CLONE_DEFAULT,
+    ) -> Self:
         return type(self)(
             self.cmap if cmap is CLONE_DEFAULT else cmap,
             self.path if path is CLONE_DEFAULT else path,
@@ -511,8 +557,9 @@ class Schema:
             anchor=self.anchor if anchor is CLONE_DEFAULT else anchor,
             widthless=self.widthless if widthless is CLONE_DEFAULT else widthless,
             marks=self.marks if marks is CLONE_DEFAULT else marks,
-            ignorability=self.ignorability if ignorability is CLONE_DEFAULT else ignorability,
+            override_ignored=self.override_ignored if override_ignored is CLONE_DEFAULT else override_ignored,
             encirclable=self.encirclable if encirclable is CLONE_DEFAULT else encirclable,
+            might_be_child=self.might_be_child if might_be_child is CLONE_DEFAULT else might_be_child,
             maximum_tree_width=self.maximum_tree_width if maximum_tree_width is CLONE_DEFAULT else maximum_tree_width,
             shading_allowed=self.shading_allowed if shading_allowed is CLONE_DEFAULT else shading_allowed,
             context_in=self.context_in if context_in is CLONE_DEFAULT else context_in,
@@ -522,8 +569,10 @@ class Schema:
             base_angle=self.base_angle if base_angle is CLONE_DEFAULT else base_angle,
             cps=self.cps if cps is CLONE_DEFAULT else cps,
             original_shape=self.original_shape if original_shape is CLONE_DEFAULT else original_shape,
+            _anchors=self.anchors if _anchors is CLONE_DEFAULT else _anchors,
         )
 
+    @override
     def __repr__(self) -> str:
         return '<Schema {}>'.format(', '.join(map(str, [
             self._calculate_name(),
@@ -544,15 +593,25 @@ class Schema:
         return self.path.calculate_diacritic_angles()
 
     @functools.cached_property
-    def without_marks(self) -> Schema:
+    def without_marks(self) -> Self:
         """Returns this schema without its marks.
 
         If this schema has no marks, the return value is ``self``.
 
-        Otherwise, the return value is the same as this schema but with
-        the ``cmap`` and ``marks`` attributes reset.
+        Otherwise, the return value is a clone of this schema with some
+        fields overridden. The ``cmap`` and ``marks`` attributes are
+        reset. The ``encirclable`` attribute is set to ``True`` if any
+        of the marks is a combining enclosing circle. The ``anchors``
+        attribute is extended with the anchors of this schema’s marks.
         """
-        return self.clone(cmap=None, marks=None) if self.marks else self
+        return self.clone(
+                cmap=None,
+                marks=None,
+                encirclable=True
+                    if any(mark.anchor == anchors.MIDDLE and isinstance(mark.path, Circle) for mark in self.marks)
+                    else CLONE_DEFAULT,
+                _anchors=self.anchors | {mark.anchor for mark in self.marks if mark.anchor is not None},
+            ) if self.marks else self
 
     @functools.cached_property
     def glyph_class(self) -> GlyphClass:
@@ -569,6 +628,20 @@ class Schema:
         )
 
     @functools.cached_property
+    def ignorability(self) -> Ignorability:
+        """Returns the ignorability of this schema’s `cmap`.
+
+        If `cmap` is ``None``, it falls back to
+        `Ignorability.DEFAULT_NO`.
+        """
+        if self.cmap is not None:
+            if self.override_ignored:
+                return Ignorability.OVERRIDDEN_NO
+            if fontTools.merge.unicode.is_Default_Ignorable(self.cmap):
+                return Ignorability.DEFAULT_YES
+        return Ignorability.DEFAULT_NO
+
+    @functools.cached_property
     def might_need_width_markers(self) -> bool:
         """Returns whether this schema might need width markers.
 
@@ -577,11 +650,8 @@ class Schema:
         been drawn.
         """
         return not (
-                self.ignored_for_topography or self.widthless
-            ) and (
-                self.glyph_class == GlyphClass.JOINER
-                or self.glyph_class == GlyphClass.MARK
-            )
+                self.child or self.ignored_for_topography or self.widthless
+            ) and self.glyph_class in {GlyphClass.JOINER, GlyphClass.MARK}
 
     @functools.cached_property
     def group(self) -> Hashable:
@@ -613,7 +683,7 @@ class Schema:
             self.ignorability == Ignorability.DEFAULT_YES,
             type(self.path),
             path_group,
-            self.path.invisible() or self.cmap is not None or self.cps[-1:] != [0x1BC9D],
+            self.path.invisible() or self.cmap is not None or self.cps[-1:] != (0x1BC9D,),
             self.size,
             self.joining_type,
             self.side_bearing,
@@ -624,6 +694,8 @@ class Schema:
             self.widthless,
             tuple(m.group for m in self.marks),
             self.glyph_class,
+            self.encirclable or self.max_double_marks != 0 or self.cmap == 0x25CC,
+            self.can_take_secant,
             self.context_in == NO_CONTEXT and not self.diphthong_1,
             self.context_out == NO_CONTEXT and not self.diphthong_2,
             self.context_in == NO_CONTEXT and self.diphthong_1,
@@ -649,6 +721,13 @@ class Schema:
     @canonical_schema.setter
     def canonical_schema(self, canonical_schema: Schema) -> None:
         assert self._canonical_schema is self
+        canonical_schema.anchors.update(self.anchors)
+        if canonical_schema.features is not None:
+            if self.features is None:
+                canonical_schema.features = self.features
+            else:
+                canonical_schema.features.update(self.features)
+        canonical_schema.scripts.update(self.scripts)
         self._canonical_schema = canonical_schema
         self._glyph_name = None
 
@@ -667,7 +746,8 @@ class Schema:
 
     @lookalike_group.setter
     def lookalike_group(self, lookalike_group: Collection[Schema]) -> None:
-        assert len(self._lookalike_group) == 1 and next(iter(self._lookalike_group)) is self
+        assert len(self._lookalike_group) == 1, self._lookalike_group
+        assert next(iter(self._lookalike_group)) is self, next(iter(self._lookalike_group))
         self._lookalike_group = lookalike_group
 
     @lookalike_group.deleter
@@ -675,20 +755,19 @@ class Schema:
         del self._lookalike_group
 
     @staticmethod
-    def _agl_name(cp: int) -> Optional[str]:
+    def _agl_name(cp: int) -> str:
         """Returns the Adobe Glyph List name of an ASCII code point.
 
         Args:
             cp: A code point.
 
-        Returns:
-            The Adobe Glyph List name of an ASCII code point, or
-            ``None`` if `cp` is not ASCII.
-
         Raises:
             KeyError: If `cp` is ASCII but has no AGL name.
+            ValueError: If `cp` is not ASCII.
         """
-        return fontTools.agl.UV2AGL[cp] if cp <= 0x7F else None
+        if cp <= 0x7F:
+            return cast(Mapping[int, str], fontTools.agl.UV2AGL)[cp]
+        raise ValueError
 
     @staticmethod
     def _u_name(cp: int) -> str:
@@ -701,6 +780,7 @@ class Schema:
         return '{}{:04X}'.format('uni' if cp <= 0xFFFF else 'u', cp)
 
     @classmethod
+    @functools.cache
     def _readable_name(cls, cp: int) -> str:
         """Returns a human-readable glyph name for a code point.
 
@@ -731,14 +811,14 @@ class Schema:
         if cps:
             first_component_implies_type = False
             try:
-                name = '_'.join(map(self._agl_name, cps))  # type: ignore[arg-type]
-            except (KeyError, TypeError):
+                name = '_'.join(map(self._agl_name, cps))
+            except (KeyError, ValueError):
                 name = '_'.join(map(self._u_name, cps))
                 name = self._COLLAPSIBLE_UNI_NAME.sub('', name)
                 readable_name = '__'.join(map(self._readable_name, cps))
                 for regex, repl in self._SEQUENCE_NAME_SUBSTITUTIONS:
                     readable_name = regex.sub(repl, readable_name)
-                if name != readable_name.replace('__', '_'):
+                if name.casefold() != readable_name.replace('__', '_').casefold():
                     name = f'{name}.{readable_name}'
         else:
             first_component_implies_type = self.path.name_implies_type()
@@ -746,38 +826,24 @@ class Schema:
                 name = ''
             else:
                 name = f'dupl.{type(self.path).__name__}'
-        if first_component_implies_type or (
-            self.cmap is None
-            and (
-                self.joining_type == Type.ORIENTING
-                or isinstance(self.path, ChildEdge)
-                or isinstance(self.path, Line) and self.path.dots
-            )
+        if (not self.ignored_for_topography
+            and (first_component_implies_type or self.cmap is None)
+            and (name_from_path := self.path.get_name(self.size, self.joining_type))
         ):
-            if name_from_path := str(self.path):
-                if name:
-                    name += '.'
-                name += name_from_path
-        if self.cmap is None and cps == [0x2044]:
+            if name:
+                name += '.'
+            name += name_from_path
+        if self.cmap is None and cps == (0x2044,):
             name += '.frac'
-        if cps and self.cmap is None and cps[0] in range(0x0030, 0x0039 + 1):
-            if self.y_min is None:
-                assert self.y_max is not None
-                if self.y_max > CAP_HEIGHT:
-                    name += '.sups'
-                else:
-                    name += '.numr'
+        if cps and self.cmap is None and self.y_min is not None and self.y_max is not None and unicodedata.category(chr(cps[0])) == 'Nd':
+            if self.y_min < 0:
+                name += '.subs'
+            elif self.y_max > CAP_HEIGHT:
+                name += '.sups'
+            elif self.y_min == 0:
+                name += '.dnom'
             else:
-                if self.y_min < 0:
-                    name += '.subs'
-                else:
-                    name += '.dnom'
-        if not cps and isinstance(self.path, Space):
-            name += f'''.{
-                    int(self.size * math.cos(math.radians(self.path.angle)))
-                }.{
-                    int(self.size * math.sin(math.radians(self.path.angle)))
-                }'''.replace('-', 'n')
+                name += '.numr'
         if not cps and self.anchor:
             name += f'.{self.anchor}'
         if self.diphthong_1 or self.diphthong_2:
@@ -788,12 +854,10 @@ class Schema:
                 name += '2'
         if self.child:
             name += '.sub'
-        if isinstance(self.path, Curve) and self.path.overlap_angle is not None:
-            name += f'.{int(self.path.overlap_angle)}'
         if self.widthless:
             name += '.wl'
         if self.ignored_for_topography:
-            name += '.skip'
+            name += '.X'
         if first_component_implies_type or self.cmap is None and self.path.invisible():
             if name and first_component_implies_type:
                 name = f'.{name}'
@@ -801,18 +865,22 @@ class Schema:
                 if name.startswith('dupl.'):
                     name = name.removeprefix('dupl')
                 name = f'_{name}'
-        agl_string = fontTools.agl.toUnicode(name)
-        agl_cps = [*map(ord, agl_string)]
-        assert cps == agl_cps, f'''The glyph name "{
-                name
-            }" corresponds to <{
-                ', '.join(f'U+{cp:04X}' for cp in agl_cps)
-            }> but its glyph corresponds to <{
-                ', '.join(f'U+{cp:04X}' for cp in cps)
-            }>'''
+        if (self.features is not None and SUBSET_FEATURES.isdisjoint(self.features)) != (name.startswith('_') or name.count('.') > 1):
+            name = self._FIRST_COMPONENT_PATTERN.sub(r'\1_', name)
+        if __debug__:
+            agl_string = fontTools.agl.toUnicode(name)
+            agl_cps = tuple(map(ord, agl_string))
+            assert cps == agl_cps, f'''The glyph name "{
+                    name
+                }" corresponds to <{
+                    ', '.join(f'U+{cp:04X}' for cp in agl_cps)
+                }> but its glyph corresponds to <{
+                    ', '.join(f'U+{cp:04X}' for cp in cps)
+                }>'''
         assert not self._RESERVED_GLYPH_NAME_PATTERN.search(name), f'The glyph name "{name}" misleadingly appears to have a disambiguatory suffix'
         return name
 
+    @override
     def __str__(self) -> str:
         """Returns this schema’s disambiguated glyph name.
 
@@ -840,11 +908,14 @@ class Schema:
                 if name in self._canonical_names:
                     if self not in self._canonical_names[name]:
                         self._canonical_names[name].append(self)
-                        name += '._{:X}'.format(len(self._canonical_names[name]) - 1)
+                        name += f'._{len(self._canonical_names[name]) - 1:X}'
                 else:
                     self._canonical_names[name] = [self]
                 self._glyph_name = name
         return self._glyph_name
+
+    def can_be_child(self) -> bool:
+        return self.might_be_child and self.path.can_be_child(self.size)
 
     def max_tree_width(self) -> int:
         """Returns the maximum width of a shorthand overlap sequence
@@ -852,29 +923,48 @@ class Schema:
         """
         return min(self.maximum_tree_width, self.path.max_tree_width(self.size))
 
+    @functools.cached_property
     def max_double_marks(self) -> int:
         """Returns the maximum number of consecutive instances of
         U+1BC9E DUPLOYAN DOUBLE MARK supported after this schema’s
         glyph.
         """
         return (0
-            if self.glyph_class != GlyphClass.JOINER
+            if self.glyph_class != GlyphClass.JOINER and not (isinstance(self.path, Line) and self.path.dots)
             else max(0, min(MAX_DOUBLE_MARKS, self.path.max_double_marks(self.size, self.joining_type, self.marks))))
 
     @functools.cached_property
     def pseudo_cursive(self) -> bool:
         """Returns whether this schema joins pseudo-cursively.
         """
-        return self.glyph_class == GlyphClass.JOINER and self.path.is_pseudo_cursive(self.size)
+        return self.glyph_class == GlyphClass.JOINER and bool(self.cps) and self.path.is_pseudo_cursive(self.size)
 
     @functools.cached_property
     def is_primary(self) -> bool:
         """Returns whether this schema’s path is primary.
 
-        This method must only be called if `path` is known to support
-        the notion of being primary, which not all shapes do.
+        Raises:
+            ValueError: If `path` does not support the notion of being
+                primary.
         """
-        return not (self.path.reversed if isinstance(self.path, Circle) else self.path.secondary or self.path.reversed_circle)  # type: ignore[attr-defined]
+        match self.path:
+            case Circle():
+                return not self.path.reversed_circle
+            case Ou():
+                for op in self.path.instructions:
+                    match op:
+                        case Component(shape=Circle() | Curve() as shape):
+                            return not shape.reversed_circle
+            case Complex():
+                for op in self.path.instructions:
+                    match op:
+                        case Component(shape=Circle() as shape):
+                            return not shape.reversed_circle
+                        case Component(shape=Curve() as shape):
+                            return not (shape.secondary or shape.reversed_circle)
+            case Curve():
+                return not (self.path.secondary or self.path.reversed_circle)
+        raise ValueError
 
     @functools.cached_property
     def can_become_part_of_diphthong(self) -> bool:
@@ -900,7 +990,7 @@ class Schema:
         """Return whether this schema can give rise to a schema that is
         ignored for topography.
         """
-        return (isinstance(self.path, (Circle, Ou))
+        return (isinstance(self.path, Circle | Ou)
             or isinstance(self.path, Curve) and not self.path.hook
         )
 
@@ -928,8 +1018,9 @@ class Schema:
             and self.can_be_ignored_for_topography()
             and context_in.ignorable_for_topography
         )
+        path: Shape
         if ignored_for_topography:
-            if isinstance(self.path, Circle):
+            if isinstance(self.path, Circle | Ou):
                 path = self.path.clone(role=CircleRole.DEPENDENT)
             else:
                 path = self.path
@@ -958,7 +1049,7 @@ class Schema:
         ignorable_for_topography = (
                 self.glyph_class == GlyphClass.JOINER
                 and self.can_lead_orienting_sequence
-                and (isinstance(self.path, Ou) or self.can_be_ignored_for_topography())
+                and self.can_be_ignored_for_topography()
             ) or CLONE_DEFAULT
         return context_in.clone(
             ignorable_for_topography=ignorable_for_topography,
@@ -973,7 +1064,7 @@ class Schema:
         ignorable_for_topography = (
             self.glyph_class == GlyphClass.JOINER
                 and self.can_lead_orienting_sequence
-                and (isinstance(self.path, Ou) or self.can_be_ignored_for_topography())
+                and self.can_be_ignored_for_topography()
             ) or CLONE_DEFAULT
         return context_out.clone(
             ignorable_for_topography=ignorable_for_topography,
@@ -981,7 +1072,7 @@ class Schema:
             diphthong_end=self.diphthong_2,
         )
 
-    def rotate_diacritic(self, context) -> Schema:
+    def rotate_diacritic(self, context: Context) -> Schema:
         """Returns a schema based on this schema but rotated as per the
         given context.
 
@@ -991,11 +1082,20 @@ class Schema:
             context: The context of the base glyph relative to which
                 this schema’s mark glyph should be rotated.
         """
+        assert isinstance(self.path, Line | RotatedComplex)
         return self.clone(
             cmap=None,
-            path=self.path.rotate_diacritic(context),  # type: ignore[attr-defined]
+            path=self.path.rotate_diacritic(context),
             base_angle=context.angle,
         )
+
+    @functools.cached_property
+    def is_secant(self) -> bool:
+        return isinstance(self.path, Line) and self.path.secant is not None and self.glyph_class == GlyphClass.JOINER
+
+    @functools.cached_property
+    def can_take_secant(self) -> bool:
+        return not self.is_secant and self.glyph_class == GlyphClass.JOINER and self.path.can_take_secant()
 
     @functools.cached_property
     def hub_priority(self) -> int:

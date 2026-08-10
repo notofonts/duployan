@@ -1,34 +1,7 @@
-WEIGHTS = Regular Bold
-ifdef UNJOINED
-    override UNJOINED = --unjoined
-endif
-FONT_FAMILY_NAME = Noto Sans Duployan$(if $(UNJOINED), Unjoined)
-CHARSET = noto
-VERSION = 3.002
-RELEASE = --release
-override NOTO = --noto
-unexport CHARSET
-SUFFIXES = otf ttf
-
-CHECK_ARGS = $(if $(filter testing,$(CHARSET)),,--incomplete)
-FONT_FILE_NAME = $(subst $(eval ) ,,$(FONT_FAMILY_NAME))
-
-FONTS = \
-	fonts/$(FONT_FILE_NAME)/unhinted/otf/$(FONT_FILE_NAME)-Regular.otf \
-	fonts/$(FONT_FILE_NAME)/unhinted/otf/$(FONT_FILE_NAME)-Bold.otf \
-	fonts/$(FONT_FILE_NAME)/unhinted/ttf/$(FONT_FILE_NAME)-Regular.ttf \
-	fonts/$(FONT_FILE_NAME)/unhinted/ttf/$(FONT_FILE_NAME)-Bold.ttf \
-	fonts/$(FONT_FILE_NAME)/hinted/otf/$(FONT_FILE_NAME)-Regular.otf \
-	fonts/$(FONT_FILE_NAME)/hinted/otf/$(FONT_FILE_NAME)-Bold.otf \
-	fonts/$(FONT_FILE_NAME)/hinted/ttf/$(FONT_FILE_NAME)-Regular.ttf \
-	fonts/$(FONT_FILE_NAME)/hinted/ttf/$(FONT_FILE_NAME)-Bold.ttf \
-	fonts/$(FONT_FILE_NAME)/googlefonts/ttf/$(FONT_FILE_NAME)-Regular.ttf \
-	fonts/$(FONT_FILE_NAME)/googlefonts/ttf/$(FONT_FILE_NAME)-Bold.ttf \
-
-
+SOURCES=$(shell python3 scripts/read-config.py --sources | sed 's/[^a-zA-Z._\/ ]//')
 help:
 	@echo "###"
-	@echo "# Build targets for $(FONT_FAMILY_NAME)"
+	@echo "# Build targets"
 	@echo "###"
 	@echo
 	@echo "  make build:  Builds the fonts and places them in the fonts/ directory"
@@ -37,35 +10,13 @@ help:
 	@echo "  make images: Creates PNG specimen images in the documentation/ directory"
 	@echo
 
+build: build.stamp
 
 venv: venv/touchfile
 
-.PHONY: build
-build: venv .init.stamp sources/config*.yaml $(FONTS)
-
-
-fonts/$(FONT_FILE_NAME)/unhinted/otf/$(FONT_FILE_NAME)-Regular.otf: sources/metadata.fea $(shell find sources -name '*.py') venv
-	. venv/bin/activate ; python sources/build.py --charset $(CHARSET) --fea $< --name '$(FONT_FAMILY_NAME)' $(NOTO) --output $@ $(RELEASE) $(UNJOINED) --version $(VERSION)
-
-fonts/$(FONT_FILE_NAME)/unhinted/otf/$(FONT_FILE_NAME)-Bold.otf: sources/metadata.fea $(shell find sources -name '*.py') venv
-	. venv/bin/activate ; python sources/build.py --bold --charset $(CHARSET) --fea $< --name '$(FONT_FAMILY_NAME)' $(NOTO) --output $@ $(RELEASE) $(UNJOINED) --version $(VERSION)
-
-$(addprefix fonts/$(FONT_FILE_NAME)/unhinted/ttf/$(FONT_FILE_NAME)-,$(addsuffix .ttf,$(WEIGHTS))): fonts/$(FONT_FILE_NAME)/unhinted/ttf/%.ttf: fonts/$(FONT_FILE_NAME)/unhinted/otf/%.otf venv
-	mkdir -p "$$(dirname "$@")"
-	. venv/bin/activate ; python sources/otf2ttf.py --output "$@" --overwrite "$<"
-
-$(addprefix fonts/$(FONT_FILE_NAME)/hinted/ttf/$(FONT_FILE_NAME)-,$(addsuffix .ttf,$(WEIGHTS))): fonts/$(FONT_FILE_NAME)/hinted/ttf/%.ttf: fonts/$(FONT_FILE_NAME)/unhinted/otf/%.otf venv
-	mkdir -p "$$(dirname "$@")"
-	cp $< $@
-
-$(addprefix fonts/$(FONT_FILE_NAME)/hinted/otf/$(FONT_FILE_NAME)-,$(addsuffix .otf,$(WEIGHTS))): fonts/$(FONT_FILE_NAME)/hinted/otf/%.otf: fonts/$(FONT_FILE_NAME)/unhinted/otf/%.otf venv
-	mkdir -p "$$(dirname "$@")"
-	cp $< $@
-
-$(addprefix fonts/$(FONT_FILE_NAME)/googlefonts/ttf/$(FONT_FILE_NAME)-,$(addsuffix .ttf,$(WEIGHTS))): fonts/$(FONT_FILE_NAME)/googlefonts/ttf/%.ttf: fonts/$(FONT_FILE_NAME)/unhinted/ttf/%.ttf venv
-	mkdir -p "$$(dirname "$@")"
-	. venv/bin/activate ; python3 scripts/hotfix.py -o $@ $<
-	. venv/bin/activate ; gftools-fix-font $@ -o $@
+build.stamp: venv .init.stamp sources/config*.yaml $(SOURCES)
+	rm -rf fonts
+	(for config in sources/config*.yaml; do . venv/bin/activate; gftools-builder $$config; done)  && touch build.stamp
 
 .init.stamp: venv
 	. venv/bin/activate; python3 scripts/first-run.py
@@ -87,6 +38,12 @@ proof: venv build.stamp
 clean:
 	rm -rf venv
 	find . -name "*.pyc" | xargs rm delete
+
+update-ufr:
+	npx update-template https://github.com/notofonts/noto-project-template/
+
+update:
+	pip install --upgrade $(dependency)
 
 manual_release: build.stamp
 	@echo "Creating release files manually is contraindicated."
